@@ -1,0 +1,23 @@
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Host=localhost;Database=joby;Username=postgres;Password=CHANGE_ME"
+  },
+  "Jwt": {
+    "Secret": "CHANGE_ME_TO_A_SECURE_SECRET_AT_LEAST_32_CHARACTERS_LONG",
+    "Issuer": "Joby",
+    "Audience": "JobyApp",
+    "AccessTokenExpirationMinutes": 60,
+    "RefreshTokenExpirationDays": 7
+  },
+  "Serilog": {
+    "MinimumLevel": {
+      "Default": "Debug",
+      "Override": {
+        "Microsoft": "Information",
+        "Microsoft.Hosting.Lifetime": "Information",
+        "Microsoft.EntityFrameworkCore": "Information"
+      }
+    }
+  }
+}
+

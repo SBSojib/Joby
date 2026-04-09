@@ -1,0 +1,71 @@
+# Dependencies
+node_modules/
+packages/
+
+# Build outputs
+dist/
+build/
+bin/
+obj/
+out/
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# .NET appsettings (do not commit real values)
+appsettings*.json
+!appsettings*.json.example
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+coverage/
+TestResults/
+
+# Misc
+*.swp
+*.swo
+*~
+.cache/
+
+# Docker
+.docker/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+
+# Do not commit terraform variable values
+*.tfvars
+!*.tfvars.example
+
+# Kubernetes secrets (commit only *.example)
+k8s/secret.yaml
+
+# Secrets (never commit these)
+secrets/
+*.pem
+*.key
+
+
+
+

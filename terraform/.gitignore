@@ -1,0 +1,16 @@
+# Terraform state (contains secrets and sensitive data)
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+
+# User-specific variables (may contain passwords)
+terraform.tfvars
+*.auto.tfvars
+
+# Crash logs
+crash.log
+crash.*.log
+
+# Plan files
+*.tfplan

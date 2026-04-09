@@ -1,0 +1,296 @@
+using System.Text.Json;
+using Joby.Application.DTOs.Common;
+using Joby.Application.DTOs.Jobs;
+using Joby.Application.Interfaces;
+using Joby.Domain.Entities;
+using Joby.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
+
+namespace Joby.Infrastructure.Services;
+
+public class JobService : IJobService
+{
+    private readonly ApplicationDbContext _context;
+    private readonly IJobScraper _jobScraper;
+    private readonly IRecommendationService _recommendationService;
+
+    public JobService(
+        ApplicationDbContext context,
+        IJobScraper jobScraper,
+        IRecommendationService recommendationService)
+    {
+        _context = context;
+        _jobScraper = jobScraper;
+        _recommendationService = recommendationService;
+    }
+
+    public async Task<JobDto> CreateJobAsync(Guid userId, CreateJobRequest request)
+    {
+        var job = new Job
+        {
+            UserId = userId,
+            Title = request.Title,
+            Company = request.Company,
+            Location = request.Location,
+            Description = request.Description,
+            Requirements = request.Requirements,
+            Salary = request.Salary,
+            JobType = request.JobType,
+            SourceUrl = request.SourceUrl,
+            SourcePlatform = request.SourcePlatform,
+            PostedDate = request.PostedDate,
+            ExpiryDate = request.ExpiryDate,
+            IsExtracted = false
+        };
+
+        _context.Jobs.Add(job);
+        await _context.SaveChangesAsync();
+
+        // Trigger recommendation computation
+        _ = Task.Run(async () => await _recommendationService.ComputeRecommendationsForJobAsync(job.Id));
+
+        return await MapToDto(job);
+    }
+
+    public async Task<JobDto> CreateJobByUrlAsync(Guid userId, string url)
+    {
+        // Check if job with same URL already exists for this user
+        var existingJob = await _context.Jobs
+            .FirstOrDefaultAsync(j => j.UserId == userId && j.SourceUrl == url);
+
+        if (existingJob != null)
+        {
+            return await MapToDto(existingJob);
+        }
+
+        // Try to scrape job data from URL
+        var scrapedData = await _jobScraper.ScrapeJobAsync(url);
+
+        var job = new Job
+        {
+            UserId = userId,
+            Title = scrapedData?.Title ?? "Unknown Position",
+            Company = scrapedData?.Company ?? "Unknown Company",
+            Location = scrapedData?.Location,
+            Description = scrapedData?.Description,
+            Requirements = scrapedData?.Requirements,
+            Salary = scrapedData?.Salary,
+            JobType = scrapedData?.JobType,
+            SourceUrl = url,
+            SourcePlatform = DetectPlatform(url),
+            PostedDate = scrapedData?.PostedDate,
+            IsExtracted = scrapedData != null,
+            ExtractedDataJson = scrapedData != null ? JsonSerializer.Serialize(scrapedData) : null
+        };
+
+        _context.Jobs.Add(job);
+        await _context.SaveChangesAsync();
+
+        // Trigger recommendation computation
+        _ = Task.Run(async () => await _recommendationService.ComputeRecommendationsForJobAsync(job.Id));
+
+        return await MapToDto(job);
+    }
+
+    public async Task<JobDto?> GetJobAsync(Guid userId, Guid jobId)
+    {
+        var job = await _context.Jobs
+            .Include(j => j.Application)
+            .FirstOrDefaultAsync(j => j.Id == jobId && j.UserId == userId);
+
+        return job != null ? await MapToDto(job) : null;
+    }
+
+    public async Task<PagedResult<JobWithRecommendationDto>> GetRecommendedJobsAsync(Guid userId, int page, int pageSize)
+    {
+        var query = _context.Recommendations
+            .Include(r => r.Job)
+                .ThenInclude(j => j.Application)
+            .Where(r => r.UserId == userId && r.IsActive)
+            .OrderByDescending(r => r.Score);
+
+        var totalCount = await query.CountAsync();
+
+        var recommendations = await query
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        var items = recommendations.Select(r => new JobWithRecommendationDto
+        {
+            Id = r.Job.Id,
+            Title = r.Job.Title,
+            Company = r.Job.Company,
+            Location = r.Job.Location,
+            Description = r.Job.Description,
+            Requirements = r.Job.Requirements,
+            Salary = r.Job.Salary,
+            JobType = r.Job.JobType,
+            SourceUrl = r.Job.SourceUrl,
+            SourcePlatform = r.Job.SourcePlatform,
+            PostedDate = r.Job.PostedDate,
+            ExpiryDate = r.Job.ExpiryDate,
+            IsExtracted = r.Job.IsExtracted,
+            HasApplication = r.Job.Application != null,
+            ApplicationId = r.Job.Application?.Id,
+            CreatedAt = r.Job.CreatedAt,
+            UpdatedAt = r.Job.UpdatedAt,
+            RecommendationScore = r.Score,
+            MatchedSkills = JsonSerializer.Deserialize<List<string>>(r.MatchedSkillsJson) ?? new(),
+            MissingSkills = JsonSerializer.Deserialize<List<string>>(r.MissingSkillsJson) ?? new(),
+            MatchedKeywords = JsonSerializer.Deserialize<List<string>>(r.MatchedKeywordsJson) ?? new(),
+            MissingKeywords = JsonSerializer.Deserialize<List<string>>(r.MissingKeywordsJson) ?? new()
+        }).ToList();
+
+        return new PagedResult<JobWithRecommendationDto>
+        {
+            Items = items,
+            TotalCount = totalCount,
+            Page = page,
+            PageSize = pageSize
+        };
+    }
+
+    public async Task<PagedResult<JobDto>> SearchJobsAsync(Guid userId, JobSearchRequest request)
+    {
+        var query = _context.Jobs
+            .Include(j => j.Application)
+            .Where(j => j.UserId == userId);
+
+        if (!string.IsNullOrWhiteSpace(request.Query))
+        {
+            var searchTerm = request.Query.ToLower();
+            query = query.Where(j =>
+                j.Title.ToLower().Contains(searchTerm) ||
+                j.Company.ToLower().Contains(searchTerm) ||
+                (j.Description != null && j.Description.ToLower().Contains(searchTerm)));
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Location))
+        {
+            query = query.Where(j => j.Location != null && j.Location.ToLower().Contains(request.Location.ToLower()));
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.JobType))
+        {
+            query = query.Where(j => j.JobType == request.JobType);
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Company))
+        {
+            query = query.Where(j => j.Company.ToLower().Contains(request.Company.ToLower()));
+        }
+
+        var totalCount = await query.CountAsync();
+
+        var jobs = await query
+            .OrderByDescending(j => j.CreatedAt)
+            .Skip((request.Page - 1) * request.PageSize)
+            .Take(request.PageSize)
+            .ToListAsync();
+
+        var items = new List<JobDto>();
+        foreach (var job in jobs)
+        {
+            items.Add(await MapToDto(job));
+        }
+
+        return new PagedResult<JobDto>
+        {
+            Items = items,
+            TotalCount = totalCount,
+            Page = request.Page,
+            PageSize = request.PageSize
+        };
+    }
+
+    public async Task<JobDto> UpdateJobAsync(Guid userId, Guid jobId, CreateJobRequest request)
+    {
+        var job = await _context.Jobs
+            .FirstOrDefaultAsync(j => j.Id == jobId && j.UserId == userId);
+
+        if (job == null)
+        {
+            throw new KeyNotFoundException("Job not found");
+        }
+
+        job.Title = request.Title;
+        job.Company = request.Company;
+        job.Location = request.Location;
+        job.Description = request.Description;
+        job.Requirements = request.Requirements;
+        job.Salary = request.Salary;
+        job.JobType = request.JobType;
+        job.SourceUrl = request.SourceUrl;
+        job.SourcePlatform = request.SourcePlatform;
+        job.PostedDate = request.PostedDate;
+        job.ExpiryDate = request.ExpiryDate;
+
+        await _context.SaveChangesAsync();
+
+        // Trigger recommendation recomputation
+        _ = Task.Run(async () => await _recommendationService.ComputeRecommendationsForJobAsync(job.Id));
+
+        return await MapToDto(job);
+    }
+
+    public async Task DeleteJobAsync(Guid userId, Guid jobId)
+    {
+        var job = await _context.Jobs
+            .FirstOrDefaultAsync(j => j.Id == jobId && j.UserId == userId);
+
+        if (job == null)
+        {
+            throw new KeyNotFoundException("Job not found");
+        }
+
+        _context.Jobs.Remove(job);
+        await _context.SaveChangesAsync();
+    }
+
+    private static string? DetectPlatform(string url)
+    {
+        if (url.Contains("linkedin.com")) return "LinkedIn";
+        if (url.Contains("indeed.com")) return "Indeed";
+        if (url.Contains("glassdoor.com")) return "Glassdoor";
+        if (url.Contains("monster.com")) return "Monster";
+        if (url.Contains("ziprecruiter.com")) return "ZipRecruiter";
+        if (url.Contains("dice.com")) return "Dice";
+        if (url.Contains("angel.co") || url.Contains("wellfound.com")) return "AngelList";
+        if (url.Contains("lever.co")) return "Lever";
+        if (url.Contains("greenhouse.io")) return "Greenhouse";
+        return null;
+    }
+
+    private async Task<JobDto> MapToDto(Job job)
+    {
+        var application = job.Application ?? await _context.Applications
+            .FirstOrDefaultAsync(a => a.JobId == job.Id);
+
+        return new JobDto
+        {
+            Id = job.Id,
+            Title = job.Title,
+            Company = job.Company,
+            Location = job.Location,
+            Description = job.Description,
+            Requirements = job.Requirements,
+            Salary = job.Salary,
+            JobType = job.JobType,
+            SourceUrl = job.SourceUrl,
+            SourcePlatform = job.SourcePlatform,
+            PostedDate = job.PostedDate,
+            ExpiryDate = job.ExpiryDate,
+            IsExtracted = job.IsExtracted,
+            HasApplication = application != null,
+            ApplicationId = application?.Id,
+            CreatedAt = job.CreatedAt,
+            UpdatedAt = job.UpdatedAt
+        };
+    }
+}
+
+
+
+
+

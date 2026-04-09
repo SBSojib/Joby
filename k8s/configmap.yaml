@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: joby-config
+  namespace: joby
+data:
+  ASPNETCORE_ENVIRONMENT: "Production"
+  Jwt__Issuer: "Joby"
+  Jwt__Audience: "JobyApp"
+  Jwt__AccessTokenExpirationMinutes: "60"
+  Jwt__RefreshTokenExpirationDays: "7"
+  Cors__AllowedOrigins__0: "https://joby.example.com"
+
+
+
+

@@ -1,0 +1,30 @@
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Host=localhost;Database=joby;Username=postgres;Password=CHANGE_ME"
+  },
+  "Jwt": {
+    "Secret": "CHANGE_ME_TO_A_SECURE_SECRET_AT_LEAST_32_CHARACTERS_LONG",
+    "Issuer": "Joby",
+    "Audience": "JobyApp",
+    "AccessTokenExpirationMinutes": 60,
+    "RefreshTokenExpirationDays": 7
+  },
+  "Cors": {
+    "AllowedOrigins": [
+      "http://localhost:5173",
+      "http://localhost:3000"
+    ]
+  },
+  "Serilog": {
+    "MinimumLevel": {
+      "Default": "Information",
+      "Override": {
+        "Microsoft": "Warning",
+        "Microsoft.Hosting.Lifetime": "Information",
+        "Microsoft.EntityFrameworkCore": "Warning"
+      }
+    }
+  },
+  "AllowedHosts": "*"
+}
+

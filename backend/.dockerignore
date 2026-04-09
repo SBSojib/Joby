@@ -1,0 +1,21 @@
+# Build outputs
+**/bin/
+**/obj/
+
+# User-specific / IDE
+.vs/
+.vscode/
+
+# Tests / tooling artifacts
+**/*.user
+**/*.suo
+
+# Git
+.git/
+.gitignore
+
+# OS
+Thumbs.db
+Desktop.ini
+
+
