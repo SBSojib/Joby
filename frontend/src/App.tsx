@@ -6,6 +6,7 @@ import RegisterPage from '@/pages/RegisterPage';
 import DashboardPage from '@/pages/DashboardPage';
 import ProfilePage from '@/pages/ProfilePage';
 import JobsPage from '@/pages/JobsPage';
+import NewJobPage from '@/pages/NewJobPage';
 import JobDetailPage from '@/pages/JobDetailPage';
 import ApplicationsPage from '@/pages/ApplicationsPage';
 import ApplicationDetailPage from '@/pages/ApplicationDetailPage';
@@ -77,6 +78,7 @@ function App() {
         <Route index element={<DashboardPage />} />
         <Route path="profile" element={<ProfilePage />} />
         <Route path="jobs" element={<JobsPage />} />
+        <Route path="jobs/new" element={<NewJobPage />} />
         <Route path="jobs/:jobId" element={<JobDetailPage />} />
         <Route path="applications" element={<ApplicationsPage />} />
         <Route path="applications/:applicationId" element={<ApplicationDetailPage />} />

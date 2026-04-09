@@ -79,6 +79,17 @@ AWS_REGION=${aws_region}
 
 # Application
 ASPNETCORE_ENVIRONMENT=Production
+
+# JWT (required)
+Jwt__Secret=CHANGE_ME_TO_A_SECURE_SECRET_AT_LEAST_32_CHARACTERS_LONG
+Jwt__Issuer=Joby
+Jwt__Audience=JobyApp
+Jwt__AccessTokenExpirationMinutes=60
+Jwt__RefreshTokenExpirationDays=7
+
+# CORS (optional)
+Cors__AllowedOrigins__0=http://44.220.132.234
+Cors__AllowedOrigins__1=http://44.220.132.234:80
 ENVFILE
 
 chown ubuntu:ubuntu /opt/${project_name}/.env

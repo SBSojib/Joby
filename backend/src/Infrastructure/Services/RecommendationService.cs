@@ -54,10 +54,12 @@ public class RecommendationService : IRecommendationService
             if (job == null) return;
 
             var profile = await _context.Profiles.FirstOrDefaultAsync(p => p.UserId == job.UserId);
-            if (profile == null) return;
-
-            var userSkills = JsonSerializer.Deserialize<List<string>>(profile.SkillsJson) ?? new();
-            var userKeywords = JsonSerializer.Deserialize<List<string>>(profile.KeywordsJson) ?? new();
+            var userSkills = profile != null
+                ? JsonSerializer.Deserialize<List<string>>(profile.SkillsJson) ?? new()
+                : new List<string>();
+            var userKeywords = profile != null
+                ? JsonSerializer.Deserialize<List<string>>(profile.KeywordsJson) ?? new()
+                : new List<string>();
 
             await ComputeAndSaveRecommendation(job.UserId, job, userSkills, userKeywords);
         }

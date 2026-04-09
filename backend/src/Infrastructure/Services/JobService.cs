@@ -1,8 +1,10 @@
 using System.Text.Json;
+using Joby.Application.DTOs.Applications;
 using Joby.Application.DTOs.Common;
 using Joby.Application.DTOs.Jobs;
 using Joby.Application.Interfaces;
 using Joby.Domain.Entities;
+using Joby.Domain.Enums;
 using Joby.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -13,15 +15,18 @@ public class JobService : IJobService
     private readonly ApplicationDbContext _context;
     private readonly IJobScraper _jobScraper;
     private readonly IRecommendationService _recommendationService;
+    private readonly IApplicationService _applicationService;
 
     public JobService(
         ApplicationDbContext context,
         IJobScraper jobScraper,
-        IRecommendationService recommendationService)
+        IRecommendationService recommendationService,
+        IApplicationService applicationService)
     {
         _context = context;
         _jobScraper = jobScraper;
         _recommendationService = recommendationService;
+        _applicationService = applicationService;
     }
 
     public async Task<JobDto> CreateJobAsync(Guid userId, CreateJobRequest request)
@@ -46,6 +51,8 @@ public class JobService : IJobService
         _context.Jobs.Add(job);
         await _context.SaveChangesAsync();
 
+        await EnsureSavedApplicationForJobAsync(userId, job.Id);
+
         // Trigger recommendation computation
         _ = Task.Run(async () => await _recommendationService.ComputeRecommendationsForJobAsync(job.Id));
 
@@ -60,6 +67,7 @@ public class JobService : IJobService
 
         if (existingJob != null)
         {
+            await EnsureSavedApplicationForJobAsync(userId, existingJob.Id);
             return await MapToDto(existingJob);
         }
 
@@ -86,10 +94,28 @@ public class JobService : IJobService
         _context.Jobs.Add(job);
         await _context.SaveChangesAsync();
 
+        await EnsureSavedApplicationForJobAsync(userId, job.Id);
+
         // Trigger recommendation computation
         _ = Task.Run(async () => await _recommendationService.ComputeRecommendationsForJobAsync(job.Id));
 
         return await MapToDto(job);
+    }
+
+    private async Task EnsureSavedApplicationForJobAsync(Guid userId, Guid jobId)
+    {
+        var exists = await _context.Applications
+            .AnyAsync(a => a.JobId == jobId && a.UserId == userId);
+        if (exists)
+        {
+            return;
+        }
+
+        await _applicationService.CreateApplicationAsync(userId, new CreateApplicationRequest
+        {
+            JobId = jobId,
+            Status = ApplicationStatus.Saved
+        });
     }
 
     public async Task<JobDto?> GetJobAsync(Guid userId, Guid jobId)

@@ -136,11 +136,24 @@ After infrastructure is up:
 
 1. SSH into the EC2 instance
 2. Edit `/opt/joby/.env` — replace `CHANGE_ME_TO_YOUR_DB_PASSWORD` with your real password
-3. Copy your `docker-compose.yml`, Dockerfiles, and nginx config to `/opt/joby/`
-4. Build or pull images, then start:
+3. Clone the application repo into `/opt/joby`
+4. If you cloned into a subfolder, copy the bootstrap `.env` into the repo folder
+5. Build or pull images, then start:
 
 ```bash
 cd /opt/joby
+
+# Option A (recommended): clone directly into /opt/joby
+git clone https://github.com/SBSojib/Joby.git .
+
+# Option B: clone into a subfolder (creates /opt/joby/Joby)
+git clone https://github.com/SBSojib/Joby
+
+# If you used Option B, copy the bootstrap env file into the repo folder
+cp /opt/joby/.env /opt/joby/Joby/.env
+
+# Start the app (run from the repo folder)
+cd /opt/joby/Joby
 docker compose up -d
 docker compose ps
 docker compose logs -f

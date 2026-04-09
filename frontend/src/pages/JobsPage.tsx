@@ -37,6 +37,7 @@ export default function JobsPage() {
     mutationFn: (url: string) => jobsApi.createByUrl(url),
     onSuccess: (job) => {
       queryClient.invalidateQueries({ queryKey: ['jobs'] });
+      queryClient.invalidateQueries({ queryKey: ['applications'] });
       setJobUrl('');
       setIsAddingJob(false);
       toast({ title: 'Job added!', description: 'The job has been saved.' });

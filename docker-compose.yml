@@ -3,6 +3,8 @@ services:
   postgres:
     image: postgres:16-alpine
     container_name: joby-postgres
+    profiles:
+      - local
     env_file:
       - .env
     environment:
@@ -42,9 +44,6 @@ services:
       - Cors__AllowedOrigins__2=${Cors__AllowedOrigins__2}
     expose:
       - "5000"
-    depends_on:
-      postgres:
-        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/health/live"]
       interval: 30s

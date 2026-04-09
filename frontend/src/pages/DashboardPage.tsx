@@ -26,10 +26,11 @@ export default function DashboardPage() {
   const [isAddingJob, setIsAddingJob] = useState(false);
   const queryClient = useQueryClient();
 
-  const { data: recommendations, isLoading: loadingRecs } = useQuery({
-    queryKey: ['recommendations'],
-    queryFn: () => jobsApi.getTopRecommendations(5),
+  const { data: recommendationsPage, isLoading: loadingRecs } = useQuery({
+    queryKey: ['jobs', 'recommended', 'dashboard'],
+    queryFn: () => jobsApi.getRecommended(1, 5),
   });
+  const recommendations = recommendationsPage?.items ?? [];
 
   const { data: applications, isLoading: loadingApps } = useQuery({
     queryKey: ['applications'],
@@ -44,8 +45,8 @@ export default function DashboardPage() {
   const addJobMutation = useMutation({
     mutationFn: (url: string) => jobsApi.createByUrl(url),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['recommendations'] });
       queryClient.invalidateQueries({ queryKey: ['jobs'] });
+      queryClient.invalidateQueries({ queryKey: ['applications'] });
       setJobUrl('');
       setIsAddingJob(false);
       toast({ title: 'Job added!', description: 'The job has been saved to your list.' });
@@ -102,10 +103,15 @@ export default function DashboardPage() {
             </Button>
           </form>
         ) : (
-          <Button onClick={() => setIsAddingJob(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Add Job by URL
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={() => setIsAddingJob(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Add Job by URL
+            </Button>
+            <Button variant="outline" asChild>
+              <Link to="/jobs/new">Add manually</Link>
+            </Button>
+          </div>
         )}
       </div>
 
@@ -180,7 +186,7 @@ export default function DashboardPage() {
               <div className="flex justify-center py-8">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
-            ) : recommendations?.length ? (
+            ) : recommendations.length ? (
               <div className="space-y-4">
                 {recommendations.map((job: JobWithRecommendation) => (
                   <JobRecommendationCard key={job.id} job={job} />
