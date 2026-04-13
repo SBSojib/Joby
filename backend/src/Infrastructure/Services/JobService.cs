@@ -16,17 +16,20 @@ public class JobService : IJobService
     private readonly IJobScraper _jobScraper;
     private readonly IRecommendationService _recommendationService;
     private readonly IApplicationService _applicationService;
+    private readonly IReminderService _reminderService;
 
     public JobService(
         ApplicationDbContext context,
         IJobScraper jobScraper,
         IRecommendationService recommendationService,
-        IApplicationService applicationService)
+        IApplicationService applicationService,
+        IReminderService reminderService)
     {
         _context = context;
         _jobScraper = jobScraper;
         _recommendationService = recommendationService;
         _applicationService = applicationService;
+        _reminderService = reminderService;
     }
 
     public async Task<JobDto> CreateJobAsync(Guid userId, CreateJobRequest request)
@@ -67,28 +70,31 @@ public class JobService : IJobService
 
         if (existingJob != null)
         {
+            await ApplyScrapeToJobAsync(existingJob, url);
             await EnsureSavedApplicationForJobAsync(userId, existingJob.Id);
-            return await MapToDto(existingJob);
+            return await MapToDto(existingJob, includeSourcePageHtml: true);
         }
 
-        // Try to scrape job data from URL
-        var scrapedData = await _jobScraper.ScrapeJobAsync(url);
+        var scrape = await _jobScraper.ScrapeJobAsync(url);
+        var meta = scrape?.Metadata;
 
         var job = new Job
         {
             UserId = userId,
-            Title = scrapedData?.Title ?? "Unknown Position",
-            Company = scrapedData?.Company ?? "Unknown Company",
-            Location = scrapedData?.Location,
-            Description = scrapedData?.Description,
-            Requirements = scrapedData?.Requirements,
-            Salary = scrapedData?.Salary,
-            JobType = scrapedData?.JobType,
+            Title = meta?.Title ?? "Unknown Position",
+            Company = meta?.Company ?? "Unknown Company",
+            Location = meta?.Location,
+            // Listing body is shown from saved HTML; avoid storing JSON-LD / scraped fragments as plain text.
+            Description = string.IsNullOrEmpty(scrape?.RawPageHtml) ? meta?.Description : null,
+            Requirements = meta?.Requirements,
+            Salary = meta?.Salary,
+            JobType = meta?.JobType,
             SourceUrl = url,
+            SourcePageHtml = scrape?.RawPageHtml,
             SourcePlatform = DetectPlatform(url),
-            PostedDate = scrapedData?.PostedDate,
-            IsExtracted = scrapedData != null,
-            ExtractedDataJson = scrapedData != null ? JsonSerializer.Serialize(scrapedData) : null
+            PostedDate = meta?.PostedDate,
+            IsExtracted = scrape != null,
+            ExtractedDataJson = meta != null ? JsonSerializer.Serialize(meta) : null
         };
 
         _context.Jobs.Add(job);
@@ -99,7 +105,75 @@ public class JobService : IJobService
         // Trigger recommendation computation
         _ = Task.Run(async () => await _recommendationService.ComputeRecommendationsForJobAsync(job.Id));
 
-        return await MapToDto(job);
+        return await MapToDto(job, includeSourcePageHtml: true);
+    }
+
+    /// <summary>
+    /// Re-fetch listing HTML and metadata when the same URL is added again (fixes stale rows and duplicate URL flows).
+    /// </summary>
+    private async Task ApplyScrapeToJobAsync(Job job, string url)
+    {
+        var scrape = await _jobScraper.ScrapeJobAsync(url);
+        if (scrape == null)
+        {
+            return;
+        }
+
+        var meta = scrape.Metadata;
+
+        if (!string.IsNullOrWhiteSpace(meta.Title))
+        {
+            job.Title = meta.Title;
+        }
+
+        if (!string.IsNullOrWhiteSpace(meta.Company))
+        {
+            job.Company = meta.Company;
+        }
+
+        if (!string.IsNullOrWhiteSpace(meta.Location))
+        {
+            job.Location = meta.Location;
+        }
+
+        if (!string.IsNullOrWhiteSpace(meta.Requirements))
+        {
+            job.Requirements = meta.Requirements;
+        }
+
+        if (!string.IsNullOrWhiteSpace(meta.Salary))
+        {
+            job.Salary = meta.Salary;
+        }
+
+        if (!string.IsNullOrWhiteSpace(meta.JobType))
+        {
+            job.JobType = meta.JobType;
+        }
+
+        if (meta.PostedDate.HasValue)
+        {
+            job.PostedDate = meta.PostedDate;
+        }
+
+        job.ExtractedDataJson = JsonSerializer.Serialize(meta);
+
+        if (!string.IsNullOrEmpty(scrape.RawPageHtml))
+        {
+            job.SourcePageHtml = scrape.RawPageHtml;
+            job.Description = null;
+        }
+        else if (!string.IsNullOrWhiteSpace(meta.Description))
+        {
+            job.Description = meta.Description;
+        }
+
+        job.SourceUrl = url;
+        job.SourcePlatform = DetectPlatform(url);
+        job.IsExtracted = scrape != null;
+        job.UpdatedAt = DateTime.UtcNow;
+
+        await _context.SaveChangesAsync();
     }
 
     private async Task EnsureSavedApplicationForJobAsync(Guid userId, Guid jobId)
@@ -124,7 +198,13 @@ public class JobService : IJobService
             .Include(j => j.Application)
             .FirstOrDefaultAsync(j => j.Id == jobId && j.UserId == userId);
 
-        return job != null ? await MapToDto(job) : null;
+        if (job == null)
+        {
+            return null;
+        }
+
+        var reminders = await _reminderService.GetRemindersForJobAsync(userId, jobId);
+        return await MapToDto(job, includeSourcePageHtml: true, reminders: reminders);
     }
 
     public async Task<PagedResult<JobWithRecommendationDto>> GetRecommendedJobsAsync(Guid userId, int page, int pageSize)
@@ -288,7 +368,7 @@ public class JobService : IJobService
         return null;
     }
 
-    private async Task<JobDto> MapToDto(Job job)
+    private async Task<JobDto> MapToDto(Job job, bool includeSourcePageHtml = false, List<ReminderDto>? reminders = null)
     {
         var application = job.Application ?? await _context.Applications
             .FirstOrDefaultAsync(a => a.JobId == job.Id);
@@ -304,12 +384,14 @@ public class JobService : IJobService
             Salary = job.Salary,
             JobType = job.JobType,
             SourceUrl = job.SourceUrl,
+            SourcePageHtml = includeSourcePageHtml ? job.SourcePageHtml : null,
             SourcePlatform = job.SourcePlatform,
             PostedDate = job.PostedDate,
             ExpiryDate = job.ExpiryDate,
             IsExtracted = job.IsExtracted,
             HasApplication = application != null,
             ApplicationId = application?.Id,
+            Reminders = reminders ?? new List<ReminderDto>(),
             CreatedAt = job.CreatedAt,
             UpdatedAt = job.UpdatedAt
         };

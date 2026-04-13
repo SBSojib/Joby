@@ -77,12 +77,12 @@ A full-stack MVP web application for tracking job applications, discovering job 
 git clone <repo-url>
 cd joby
 
-# Start all services
-docker-compose up --build
+# Start app + Postgres (profile `local` includes the database; Postgres is on host port 5300)
+docker compose --profile local up --build -d
 
 # Access the app
-# Frontend: http://localhost:3000
-# Backend API: http://localhost:5000
+# Frontend: http://localhost:8080
+# Backend API (host): http://localhost:5000
 # Swagger: http://localhost:5000/swagger
 ```
 
@@ -97,8 +97,8 @@ docker-compose up --build
 chmod +x scripts/dev-setup.sh
 ./scripts/dev-setup.sh
 
-# Start PostgreSQL
-docker-compose up -d postgres
+# Start PostgreSQL (Compose profile `local`; published on host port 5300)
+docker compose --profile local up -d postgres
 
 # Start backend (terminal 1)
 cd backend
@@ -118,7 +118,7 @@ npm run dev
 ### Backend (appsettings.json or environment)
 
 ```env
-ConnectionStrings__DefaultConnection=Host=localhost;Database=joby;Username=postgres;Password=CHANGE_ME
+ConnectionStrings__DefaultConnection=Host=localhost;Port=5300;Database=joby;Username=postgres;Password=CHANGE_ME
 Jwt__Secret=YOUR_SUPER_SECRET_KEY_MIN_32_CHARS
 Jwt__Issuer=Joby
 Jwt__Audience=JobyApp

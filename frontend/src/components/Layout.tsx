@@ -1,4 +1,4 @@
-import { Outlet, NavLink, useNavigate } from 'react-router-dom';
+import { Outlet, NavLink, useNavigate, useLocation, matchPath } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import {
@@ -11,25 +11,30 @@ import {
   Menu,
   X,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 
-const navItems = [
-  { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
+const navItems: { to: string; icon: LucideIcon; label: string; end?: boolean }[] = [
+  { to: '/', icon: LayoutDashboard, label: 'Dashboard', end: true },
   { to: '/jobs', icon: Briefcase, label: 'Jobs' },
   { to: '/applications', icon: FileText, label: 'Applications' },
   { to: '/reminders', icon: Bell, label: 'Reminders' },
   { to: '/profile', icon: User, label: 'Profile' },
 ];
 
+function sidebarLinkActive(pathname: string, to: string, end?: boolean): boolean {
+  return matchPath({ path: to, end: end ?? false }, pathname) != null;
+}
+
 export default function Layout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const handleLogout = async () => {
     await logout();
-    navigate('/login');
   };
 
   return (
@@ -45,8 +50,10 @@ export default function Layout() {
       {/* Sidebar */}
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-50 w-64 transform bg-card border-r transition-transform duration-200 ease-in-out lg:relative lg:translate-x-0',
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+          'z-50 w-64 shrink-0 border-r bg-card transition-transform duration-200 ease-in-out',
+          'max-lg:fixed max-lg:inset-y-0 max-lg:left-0 max-lg:transform',
+          sidebarOpen ? 'max-lg:translate-x-0' : 'max-lg:-translate-x-full',
+          'lg:relative lg:translate-x-0'
         )}
       >
         <div className="flex h-full flex-col">
@@ -68,25 +75,31 @@ export default function Layout() {
 
           {/* Navigation */}
           <nav className="flex-1 space-y-1 p-4">
-            {navItems.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                end={item.to === '/'}
-                onClick={() => setSidebarOpen(false)}
-                className={({ isActive }) =>
-                  cn(
-                    'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-                    isActive
+            {navItems.map((item) => {
+              const active = sidebarLinkActive(location.pathname, item.to, item.end);
+              return (
+                <a
+                  key={item.to}
+                  href={item.to}
+                  onClick={(e) => {
+                    setSidebarOpen(false);
+                    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+                    if (e.button !== 0) return;
+                    e.preventDefault();
+                    navigate(item.to);
+                  }}
+                  className={cn(
+                    'flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                    active
                       ? 'bg-primary text-primary-foreground'
                       : 'text-muted-foreground hover:bg-accent hover:text-foreground'
-                  )
-                }
-              >
-                <item.icon className="h-5 w-5" />
-                {item.label}
-              </NavLink>
-            ))}
+                  )}
+                >
+                  <item.icon className="h-5 w-5 shrink-0" />
+                  {item.label}
+                </a>
+              );
+            })}
           </nav>
 
           {/* User section */}

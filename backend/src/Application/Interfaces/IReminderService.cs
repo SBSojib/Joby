@@ -6,6 +6,7 @@ namespace Joby.Application.Interfaces;
 public interface IReminderService
 {
     Task<ReminderDto> CreateReminderAsync(Guid userId, CreateReminderRequest request);
+    Task<List<ReminderDto>> GetRemindersForJobAsync(Guid userId, Guid jobId);
     Task<List<ReminderDto>> GetRemindersAsync(Guid userId, bool includePast = false);
     Task<List<ReminderDto>> GetUpcomingRemindersAsync(Guid userId, int days = 7);
     Task<ReminderDto> SnoozeReminderAsync(Guid userId, Guid reminderId, SnoozeReminderRequest request);

@@ -3,6 +3,7 @@ using Hangfire;
 using Hangfire.PostgreSql;
 using Joby.Application.Interfaces;
 using Joby.Infrastructure.BackgroundJobs;
+using Joby.Infrastructure.Email;
 using Joby.Infrastructure.Persistence;
 using Joby.Infrastructure.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -73,8 +74,12 @@ public static class DependencyInjection
         services.AddScoped<IRecommendationService, RecommendationService>();
         services.AddScoped<IResumeParser, ResumeParser>();
 
+        services.Configure<EmailSettings>(configuration.GetSection(EmailSettings.SectionName));
+        services.AddSingleton<IEmailSender, SmtpEmailSender>();
+
         // Background Jobs
         services.AddScoped<RecommendationRefreshJob>();
+        services.AddScoped<ReminderEmailDispatchJob>();
 
         return services;
     }
@@ -90,6 +95,11 @@ public static class DependencyInjection
             "refresh-recommendations",
             job => job.ExecuteAsync(),
             "0 */6 * * *"); // Every 6 hours
+
+        recurringJobManager.AddOrUpdate<ReminderEmailDispatchJob>(
+            "dispatch-reminder-emails",
+            job => job.ExecuteAsync(),
+            "* * * * *"); // Every minute
     }
 }
 

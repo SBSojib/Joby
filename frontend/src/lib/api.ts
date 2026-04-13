@@ -267,6 +267,7 @@ export const applicationsApi = {
 export const remindersApi = {
   create: async (data: {
     applicationId?: string;
+    jobId?: string;
     title: string;
     description?: string;
     dueAt: string;
@@ -298,6 +299,18 @@ export const remindersApi = {
 
   dismiss: async (id: string): Promise<Reminder> => {
     const response = await api.put<Reminder>(`/reminders/${id}/dismiss`);
+    return response.data;
+  },
+};
+
+/** Public careers form (multipart; do not set JSON Content-Type). */
+export const careersApi = {
+  submitApplication: async (formData: FormData): Promise<{ message: string }> => {
+    const response = await axios.post<{ message: string }>(
+      `${API_BASE_URL}/careers/applications`,
+      formData,
+      { withCredentials: true }
+    );
     return response.data;
   },
 };

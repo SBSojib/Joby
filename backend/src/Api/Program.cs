@@ -28,6 +28,9 @@ builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddControllers();
 builder.Services.AddFluentValidationAutoValidation();
 
+builder.Services.Configure<GlobalAggregateRateLimitOptions>(
+    builder.Configuration.GetSection(GlobalAggregateRateLimitOptions.SectionName));
+
 // Health checks
 builder.Services.AddHealthChecks()
     .AddDbContextCheck<ApplicationDbContext>();
@@ -99,6 +102,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseSerilogRequestLogging();
+app.UseMiddleware<GlobalAggregateRateLimitMiddleware>();
 app.UseCors("AllowFrontend");
 
 app.UseAuthentication();

@@ -1,12 +1,15 @@
+# syntax=docker/dockerfile:1
+
 # Development Dockerfile with hot reload
 FROM node:20-alpine
 WORKDIR /app
 
 # Copy package files
-COPY package.json package-lock.json* ./
+COPY package.json package-lock.json ./
 
-# Install dependencies
-RUN npm ci
+# Install dependencies (persist npm cache across builds with BuildKit)
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --no-audit --no-fund
 
 # Copy source code
 COPY . .

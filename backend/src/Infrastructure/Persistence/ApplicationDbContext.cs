@@ -140,6 +140,11 @@ public class ApplicationDbContext : DbContext
                 .WithMany(a => a.Reminders)
                 .HasForeignKey(e => e.ApplicationId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.Job)
+                .WithMany(j => j.Reminders)
+                .HasForeignKey(e => e.JobId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         // Recommendation configuration

@@ -2,35 +2,46 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { jobsApi, applicationsApi } from '@/lib/api';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { toast } from '@/components/ui/toaster';
 import {
   Plus,
-  Search,
   ExternalLink,
   Loader2,
   Briefcase,
   MapPin,
   Building2,
   Sparkles,
+  Trash2,
 } from 'lucide-react';
 import { formatDate, truncate } from '@/lib/utils';
 import { ApplicationStatus } from '@/types';
-import type { JobWithRecommendation } from '@/types';
+import type { Job, JobWithRecommendation } from '@/types';
+
+const SAVED_JOBS_PAGE_SIZE = 200;
 
 export default function JobsPage() {
   const [jobUrl, setJobUrl] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
   const [isAddingJob, setIsAddingJob] = useState(false);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
-  const { data: recommendedJobs, isLoading } = useQuery({
-    queryKey: ['jobs', 'recommended'],
-    queryFn: () => jobsApi.getRecommended(1, 50),
+  const { data: savedJobsPage, isLoading } = useQuery({
+    queryKey: ['jobs', 'saved'],
+    queryFn: () => jobsApi.search({ page: 1, pageSize: SAVED_JOBS_PAGE_SIZE }),
   });
 
   const addJobMutation = useMutation({
@@ -62,6 +73,23 @@ export default function JobsPage() {
     },
   });
 
+  const deleteJobMutation = useMutation({
+    mutationFn: (id: string) => jobsApi.delete(id),
+    onSuccess: (_, deletedId) => {
+      queryClient.invalidateQueries({ queryKey: ['jobs'] });
+      queryClient.invalidateQueries({ queryKey: ['applications'] });
+      queryClient.removeQueries({ queryKey: ['job', deletedId] });
+      toast({ title: 'Job deleted', description: 'This job has been permanently removed.' });
+    },
+    onError: () => {
+      toast({
+        variant: 'destructive',
+        title: 'Could not delete job',
+        description: 'Something went wrong. Please try again.',
+      });
+    },
+  });
+
   const handleAddJob = (e: React.FormEvent) => {
     e.preventDefault();
     if (jobUrl.trim()) {
@@ -69,14 +97,9 @@ export default function JobsPage() {
     }
   };
 
-  const jobs = recommendedJobs?.items || [];
-  const filteredJobs = searchQuery
-    ? jobs.filter(
-        (job) =>
-          job.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          job.company.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    : jobs;
+  const savedJobs = savedJobsPage?.items ?? [];
+  const totalSaved = savedJobsPage?.totalCount ?? 0;
+  const showingPartial = totalSaved > savedJobs.length;
 
   return (
     <div className="space-y-6">
@@ -119,44 +142,56 @@ export default function JobsPage() {
         )}
       </div>
 
-      {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          placeholder="Search jobs..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-10"
-        />
-      </div>
+      {/* Saved jobs */}
+      <section className="space-y-4">
+        <div>
+          <h2 className="text-xl font-semibold tracking-tight">Saved jobs</h2>
+          <p className="text-sm text-muted-foreground">
+            Every job you have added to Joby, newest first.
+            {totalSaved > 0 && (
+              <span className="text-foreground"> ({totalSaved} total)</span>
+            )}
+          </p>
+        </div>
 
-      {/* Jobs List */}
-      {isLoading ? (
-        <div className="flex justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        </div>
-      ) : filteredJobs.length ? (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {filteredJobs.map((job: JobWithRecommendation) => (
-            <JobCard
-              key={job.id}
-              job={job}
-              onSave={() => saveJobMutation.mutate(job.id)}
-              isSaving={saveJobMutation.isPending}
-            />
-          ))}
-        </div>
-      ) : (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <Briefcase className="h-12 w-12 text-muted-foreground mb-4" />
-            <h3 className="text-lg font-medium">No jobs found</h3>
-            <p className="text-muted-foreground text-center mt-1">
-              Add jobs by URL or create a manual entry to get started.
-            </p>
-          </CardContent>
-        </Card>
-      )}
+        {isLoading ? (
+          <div className="flex justify-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          </div>
+        ) : savedJobs.length ? (
+          <>
+            {showingPartial && (
+              <p className="text-sm text-muted-foreground">
+                Showing the {savedJobs.length} most recent of {totalSaved} saved jobs.
+              </p>
+            )}
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {savedJobs.map((job) => (
+                <JobCard
+                  key={job.id}
+                  job={job}
+                  onSave={() => saveJobMutation.mutate(job.id)}
+                  isSaving={saveJobMutation.isPending}
+                  onDelete={() => deleteJobMutation.mutateAsync(job.id)}
+                  isDeleting={deleteJobMutation.isPending && deleteJobMutation.variables === job.id}
+                />
+              ))}
+            </div>
+          </>
+        ) : (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">No saved jobs yet</CardTitle>
+              <CardDescription>
+                Add a job by URL or use manual entry. Everything you save will show up here.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col items-center justify-center pb-10 pt-2">
+              <Briefcase className="h-12 w-12 text-muted-foreground mb-4 opacity-60" />
+            </CardContent>
+          </Card>
+        )}
+      </section>
     </div>
   );
 }
@@ -165,11 +200,20 @@ function JobCard({
   job,
   onSave,
   isSaving,
+  onDelete,
+  isDeleting,
 }: {
-  job: JobWithRecommendation;
+  job: Job;
   onSave: () => void;
   isSaving: boolean;
+  onDelete: () => Promise<void>;
+  isDeleting: boolean;
 }) {
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const rec = job as JobWithRecommendation;
+  const matchedSkills = rec.matchedSkills ?? [];
+  const showMatchScore = rec.recommendationScore != null && rec.recommendationScore > 0;
+
   return (
     <Card className="hover:border-primary/50 transition-colors">
       <CardHeader className="pb-3">
@@ -211,27 +255,26 @@ function JobCard({
           </p>
         )}
 
-        {/* Recommendation Score */}
-        {job.recommendationScore !== undefined && job.recommendationScore > 0 && (
+        {/* Recommendation extras (only when present, e.g. from recommendation feeds) */}
+        {showMatchScore && (
           <div className="flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-primary" />
             <Badge variant="secondary" className="bg-primary/20 text-primary">
-              {Math.round(job.recommendationScore)}% match
+              {Math.round(rec.recommendationScore!)}% match
             </Badge>
           </div>
         )}
 
-        {/* Matched Skills */}
-        {job.matchedSkills.length > 0 && (
+        {matchedSkills.length > 0 && (
           <div className="flex flex-wrap gap-1">
-            {job.matchedSkills.slice(0, 3).map((skill) => (
+            {matchedSkills.slice(0, 3).map((skill) => (
               <Badge key={skill} variant="outline" className="text-xs bg-green-500/10 text-green-400 border-green-500/30">
                 {skill}
               </Badge>
             ))}
-            {job.matchedSkills.length > 3 && (
+            {matchedSkills.length > 3 && (
               <Badge variant="outline" className="text-xs">
-                +{job.matchedSkills.length - 3}
+                +{matchedSkills.length - 3}
               </Badge>
             )}
           </div>
@@ -244,14 +287,55 @@ function JobCard({
         {/* Actions */}
         <div className="flex gap-2 pt-2">
           {job.hasApplication ? (
-            <Button variant="secondary" size="sm" className="w-full" asChild>
+            <Button variant="secondary" size="sm" className="flex-1" asChild>
               <Link to={`/applications/${job.applicationId}`}>View Application</Link>
             </Button>
           ) : (
-            <Button size="sm" className="w-full" onClick={onSave} disabled={isSaving}>
+            <Button size="sm" className="flex-1" onClick={onSave} disabled={isSaving}>
               {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save Job'}
             </Button>
           )}
+          <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+            <AlertDialogTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="shrink-0 border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                aria-label="Delete job"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete this job?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This permanently removes this job from your account
+                  {job.hasApplication ? ', including the linked application and its history' : ''}. This cannot be
+                  undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <Button
+                  variant="destructive"
+                  disabled={isDeleting}
+                  onClick={async () => {
+                    try {
+                      await onDelete();
+                      setDeleteOpen(false);
+                    } catch {
+                      /* toast handled by mutation onError */
+                    }
+                  }}
+                >
+                  {isDeleting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Trash2 className="h-4 w-4 mr-2" />}
+                  Delete permanently
+                </Button>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       </CardContent>
     </Card>

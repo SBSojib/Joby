@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1
+
 # Build stage
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
@@ -13,16 +15,18 @@ COPY src/Domain/Joby.Domain.csproj src/Domain/
 COPY src/Infrastructure/Joby.Infrastructure.csproj src/Infrastructure/
 COPY tests/Joby.Tests/Joby.Tests.csproj tests/Joby.Tests/
 
-# Restore dependencies
-RUN dotnet restore
+# Restore dependencies (persist NuGet cache across builds with BuildKit)
+RUN --mount=type=cache,target=/root/.nuget/packages \
+    dotnet restore
 
 # Copy source code
 COPY src/ src/
 COPY tests/ tests/
 
-# Build and publish
+# Build and publish (same NuGet cache mount as restore — packages live on the mount, not in the image layer)
 WORKDIR /src/src/Api
-RUN dotnet publish -c Release -o /app/publish --no-restore
+RUN --mount=type=cache,target=/root/.nuget/packages \
+    dotnet publish -c Release -o /app/publish --no-restore
 
 # Runtime stage
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime

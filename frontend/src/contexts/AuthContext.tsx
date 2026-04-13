@@ -58,7 +58,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     setAccessToken(null);
     setUser(null);
-    navigate('/login');
+    navigate('/');
   };
 
   return (

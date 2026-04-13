@@ -1,11 +1,22 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { applicationsApi, remindersApi } from '@/lib/api';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { ReminderDateTimeFields } from '@/components/ReminderDateTimeFields';
 import { toast } from '@/components/ui/toaster';
 import {
   ArrowLeft,
@@ -19,10 +30,18 @@ import {
   CheckCircle,
   Calendar,
   MessageSquare,
+  Trash2,
 } from 'lucide-react';
-import { formatDate, formatRelativeTime, getStatusColor, cn } from '@/lib/utils';
-import { ApplicationStatus, ApplicationStatusLabels, ReminderStatus } from '@/types';
-import { useState } from 'react';
+import {
+  formatDate,
+  formatRelativeTime,
+  getStatusColor,
+  cn,
+  getDefaultReminderDueParts,
+  localDateTimePartsToIso,
+} from '@/lib/utils';
+import { ApplicationStatus, ApplicationStatusLabels, ReminderStatus, type Application } from '@/types';
+import { useState, useEffect } from 'react';
 
 export default function ApplicationDetailPage() {
   const { applicationId } = useParams<{ applicationId: string }>();
@@ -30,6 +49,12 @@ export default function ApplicationDetailPage() {
   const queryClient = useQueryClient();
   const [showAddEvent, setShowAddEvent] = useState(false);
   const [eventNote, setEventNote] = useState('');
+  const [showAddReminder, setShowAddReminder] = useState(false);
+  const [reminderTitle, setReminderTitle] = useState('');
+  const [reminderDescription, setReminderDescription] = useState('');
+  const [reminderDueDate, setReminderDueDate] = useState('');
+  const [reminderDueTime, setReminderDueTime] = useState('');
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   const { data: application, isLoading } = useQuery({
     queryKey: ['application', applicationId],
@@ -62,8 +87,75 @@ export default function ApplicationDetailPage() {
     mutationFn: (id: string) => remindersApi.complete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['application', applicationId] });
+      const cached = queryClient.getQueryData<Application>(['application', applicationId]);
+      if (cached?.job?.id) {
+        queryClient.invalidateQueries({ queryKey: ['job', cached.job.id] });
+      }
       queryClient.invalidateQueries({ queryKey: ['reminders'] });
       toast({ title: 'Reminder completed' });
+    },
+  });
+
+  const createReminderMutation = useMutation({
+    mutationFn: (vars: { title: string; description: string; dueAt: string; applicationPk: string }) => {
+      return remindersApi.create({
+        applicationId: vars.applicationPk,
+        title: vars.title,
+        description: vars.description || undefined,
+        dueAt: vars.dueAt,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['application', applicationId] });
+      const cached = queryClient.getQueryData<Application>(['application', applicationId]);
+      if (cached?.job?.id) {
+        queryClient.invalidateQueries({ queryKey: ['job', cached.job.id] });
+      }
+      queryClient.invalidateQueries({ queryKey: ['reminders'] });
+      setShowAddReminder(false);
+      setReminderTitle('');
+      setReminderDescription('');
+      const { date, time } = getDefaultReminderDueParts();
+      setReminderDueDate(date);
+      setReminderDueTime(time);
+      toast({ title: 'Reminder scheduled', description: 'You will get an email when it is due (if email is configured).' });
+    },
+    onError: () => {
+      toast({
+        variant: 'destructive',
+        title: 'Could not save reminder',
+        description: 'Check the due time is in the future and try again.',
+      });
+    },
+  });
+
+  useEffect(() => {
+    const { date, time } = getDefaultReminderDueParts();
+    setReminderDueDate(date);
+    setReminderDueTime(time);
+  }, [applicationId]);
+
+  const deleteApplicationMutation = useMutation({
+    mutationFn: () => applicationsApi.delete(applicationId!),
+    onSuccess: () => {
+      const cached = queryClient.getQueryData<Application>(['application', applicationId]);
+      const jobId = cached?.job.id;
+      queryClient.invalidateQueries({ queryKey: ['applications'] });
+      queryClient.invalidateQueries({ queryKey: ['jobs'] });
+      if (jobId) {
+        queryClient.invalidateQueries({ queryKey: ['job', jobId] });
+      }
+      queryClient.removeQueries({ queryKey: ['application', applicationId] });
+      setDeleteDialogOpen(false);
+      toast({ title: 'Application deleted', description: 'This application has been permanently removed.' });
+      navigate('/applications');
+    },
+    onError: () => {
+      toast({
+        variant: 'destructive',
+        title: 'Could not delete application',
+        description: 'Something went wrong. Please try again.',
+      });
     },
   });
 
@@ -94,6 +186,25 @@ export default function ApplicationDetailPage() {
     if (eventNote.trim()) {
       addEventMutation.mutate({ eventType: 'Note', description: eventNote.trim() });
     }
+  };
+
+  const handleSaveReminder = () => {
+    if (!applicationId || !reminderTitle.trim() || !reminderDueDate || !reminderDueTime) return;
+    const dueAt = localDateTimePartsToIso(reminderDueDate, reminderDueTime);
+    if (Number.isNaN(new Date(dueAt).getTime())) {
+      toast({
+        variant: 'destructive',
+        title: 'Invalid date or time',
+        description: 'Please choose a valid date and time.',
+      });
+      return;
+    }
+    createReminderMutation.mutate({
+      title: reminderTitle.trim(),
+      description: reminderDescription.trim(),
+      dueAt,
+      applicationPk: applicationId,
+    });
   };
 
   return (
@@ -269,12 +380,65 @@ export default function ApplicationDetailPage() {
           {/* Reminders */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Bell className="h-5 w-5" />
-                Reminders
-              </CardTitle>
+              <div className="flex items-center justify-between gap-2">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Bell className="h-5 w-5" />
+                  Reminders
+                </CardTitle>
+                <Button variant="outline" size="sm" onClick={() => setShowAddReminder(!showAddReminder)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add
+                </Button>
+              </div>
+              <CardDescription className="text-xs">
+                Linked to this application. You will receive an email at the due time if SMTP is configured.
+              </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
+              {showAddReminder && (
+                <div className="p-4 border rounded-lg space-y-3">
+                  <div>
+                    <Label htmlFor="ar-title">Title</Label>
+                    <Input
+                      id="ar-title"
+                      placeholder="Prep for interview"
+                      value={reminderTitle}
+                      onChange={(e) => setReminderTitle(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="ar-desc">Details (optional)</Label>
+                    <textarea
+                      id="ar-desc"
+                      className={cn(
+                        'flex min-h-[72px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50'
+                      )}
+                      placeholder="Notes for your future self"
+                      value={reminderDescription}
+                      onChange={(e) => setReminderDescription(e.target.value)}
+                    />
+                  </div>
+                  <ReminderDateTimeFields
+                    idPrefix="ar"
+                    dateValue={reminderDueDate}
+                    timeValue={reminderDueTime}
+                    onDateChange={setReminderDueDate}
+                    onTimeChange={setReminderDueTime}
+                  />
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={handleSaveReminder} disabled={createReminderMutation.isPending}>
+                      {createReminderMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      ) : null}
+                      Save reminder
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => setShowAddReminder(false)}>
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              )}
+
               {activeReminders.length > 0 ? (
                 <div className="space-y-3">
                   {activeReminders.map((reminder) => (
@@ -284,6 +448,9 @@ export default function ApplicationDetailPage() {
                     >
                       <div>
                         <p className="text-sm font-medium">{reminder.title}</p>
+                        {reminder.description && (
+                          <p className="text-xs text-muted-foreground mt-1">{reminder.description}</p>
+                        )}
                         <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
                           <Calendar className="h-3 w-3" />
                           Due {formatDate(reminder.dueAt)}
@@ -293,6 +460,7 @@ export default function ApplicationDetailPage() {
                         variant="ghost"
                         size="sm"
                         onClick={() => completeReminderMutation.mutate(reminder.id)}
+                        aria-label="Mark reminder complete"
                       >
                         <CheckCircle className="h-4 w-4" />
                       </Button>
@@ -300,7 +468,7 @@ export default function ApplicationDetailPage() {
                   ))}
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground">No active reminders</p>
+                !showAddReminder && <p className="text-sm text-muted-foreground">No active reminders</p>
               )}
             </CardContent>
           </Card>
@@ -339,6 +507,42 @@ export default function ApplicationDetailPage() {
               </CardContent>
             </Card>
           )}
+
+          <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+            <AlertDialogTrigger asChild>
+              <Button
+                variant="outline"
+                className="w-full border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive"
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete application
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete this application?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This permanently removes this application, including its timeline, notes, and reminders. The saved job
+                  listing stays in your Jobs list unless you delete it separately. This action cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <Button
+                  variant="destructive"
+                  disabled={deleteApplicationMutation.isPending}
+                  onClick={() => deleteApplicationMutation.mutate()}
+                >
+                  {deleteApplicationMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  ) : (
+                    <Trash2 className="h-4 w-4 mr-2" />
+                  )}
+                  Delete permanently
+                </Button>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       </div>
     </div>

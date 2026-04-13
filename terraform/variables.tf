@@ -160,3 +160,9 @@ variable "s3_versioning_enabled" {
   type        = bool
   default     = false
 }
+
+variable "app_target_port" {
+  description = "TCP port on the EC2 security group for inbound app traffic (Docker publish port for the frontend, e.g. 8080)."
+  type        = number
+  default     = 8080
+}

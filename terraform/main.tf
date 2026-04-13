@@ -63,6 +63,7 @@ module "security" {
   environment       = var.environment
   vpc_id            = data.aws_vpc.default.id
   allowed_ssh_cidrs = var.allowed_ssh_cidrs
+  app_target_port   = var.app_target_port
   tags              = local.common_tags
 }
 

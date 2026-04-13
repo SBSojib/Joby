@@ -15,6 +15,26 @@
       "http://localhost:3000"
     ]
   },
+  "Email": {
+    "FromAddress": "",
+    "FromName": "Joby",
+    "Smtp": {
+      "Host": "",
+      "Port": 587,
+      "User": "",
+      "Password": "",
+      "UseSsl": true
+    }
+  },
+  "Careers": {
+    "RecipientEmail": "sojib.24csedu.037@gmail.com"
+  },
+  "GlobalRateLimit": {
+    "Enabled": true,
+    "MaxRequestsPer10Minutes": 20,
+    "MaxRequestsPerHour": 100,
+    "BypassPathPrefixes": [ "/health/live", "/health/ready" ]
+  },
   "Serilog": {
     "MinimumLevel": {
       "Default": "Information",

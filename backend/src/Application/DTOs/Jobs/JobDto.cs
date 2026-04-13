@@ -1,3 +1,5 @@
+using Joby.Application.DTOs.Applications;
+
 namespace Joby.Application.DTOs.Jobs;
 
 public class JobDto
@@ -11,12 +13,16 @@ public class JobDto
     public string? Salary { get; set; }
     public string? JobType { get; set; }
     public string? SourceUrl { get; set; }
+    /// <summary>Present only on single-job fetch: full saved HTML from the source URL.</summary>
+    public string? SourcePageHtml { get; set; }
     public string? SourcePlatform { get; set; }
     public DateTime? PostedDate { get; set; }
     public DateTime? ExpiryDate { get; set; }
     public bool IsExtracted { get; set; }
     public bool HasApplication { get; set; }
     public Guid? ApplicationId { get; set; }
+    /// <summary>Active reminders for this job (from the application and/or job-scoped).</summary>
+    public List<ReminderDto> Reminders { get; set; } = new();
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 }

@@ -24,3 +24,9 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "app_target_port" {
+  description = "Inbound TCP port on EC2 for the app (e.g. Docker publish port for frontend nginx, 8080:80)"
+  type        = number
+  default     = 8080
+}

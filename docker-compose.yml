@@ -11,15 +11,17 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
+    # Host 5300 avoids clashes with other stacks (e.g. kind) using 5432; in-network name is still postgres:5432
     ports:
-      - "5432:5432"
+      - "5300:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 10s
+      interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 30s
     networks:
       - joby-network
 
@@ -29,6 +31,8 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: joby-backend
+    # Retries until Postgres is listening (cannot use depends_on+healthy: postgres is profiled and undefined without --profile local)
+    restart: unless-stopped
     env_file:
       - .env
     environment:
@@ -44,6 +48,8 @@ services:
       - Cors__AllowedOrigins__2=${Cors__AllowedOrigins__2}
     expose:
       - "5000"
+    ports:
+      - "5000:5000"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/health/live"]
       interval: 30s
@@ -62,7 +68,7 @@ services:
         VITE_API_URL: /api
     container_name: joby-frontend
     ports:
-      - "80:80"
+      - "8080:80"
     depends_on:
       - backend
     networks:

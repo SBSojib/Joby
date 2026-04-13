@@ -19,18 +19,18 @@ import {
 } from 'lucide-react';
 import { formatRelativeTime, getStatusColor } from '@/lib/utils';
 import { ApplicationStatusLabels } from '@/types';
-import type { JobWithRecommendation, Application, Reminder } from '@/types';
+import type { Job, Application, Reminder } from '@/types';
 
 export default function DashboardPage() {
   const [jobUrl, setJobUrl] = useState('');
   const [isAddingJob, setIsAddingJob] = useState(false);
   const queryClient = useQueryClient();
 
-  const { data: recommendationsPage, isLoading: loadingRecs } = useQuery({
-    queryKey: ['jobs', 'recommended', 'dashboard'],
-    queryFn: () => jobsApi.getRecommended(1, 5),
+  const { data: savedJobsPreview, isLoading: loadingSavedJobs } = useQuery({
+    queryKey: ['jobs', 'saved', 'dashboard'],
+    queryFn: () => jobsApi.search({ page: 1, pageSize: 2 }),
   });
-  const recommendations = recommendationsPage?.items ?? [];
+  const savedJobs = savedJobsPreview?.items ?? [];
 
   const { data: applications, isLoading: loadingApps } = useQuery({
     queryKey: ['applications'],
@@ -165,16 +165,16 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        {/* Recommended Jobs */}
+        {/* Saved jobs preview */}
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle className="flex items-center gap-2">
-                  <Sparkles className="h-5 w-5 text-primary" />
-                  Recommended Jobs
+                  <Briefcase className="h-5 w-5 text-primary" />
+                  Saved jobs
                 </CardTitle>
-                <CardDescription>Based on your profile and skills</CardDescription>
+                <CardDescription>Your two most recently added jobs</CardDescription>
               </div>
               <Button variant="ghost" size="sm" asChild>
                 <Link to="/jobs">View all</Link>
@@ -182,21 +182,21 @@ export default function DashboardPage() {
             </div>
           </CardHeader>
           <CardContent>
-            {loadingRecs ? (
+            {loadingSavedJobs ? (
               <div className="flex justify-center py-8">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
-            ) : recommendations.length ? (
+            ) : savedJobs.length ? (
               <div className="space-y-4">
-                {recommendations.map((job: JobWithRecommendation) => (
-                  <JobRecommendationCard key={job.id} job={job} />
+                {savedJobs.map((job) => (
+                  <SavedJobPreviewCard key={job.id} job={job} />
                 ))}
               </div>
             ) : (
               <div className="text-center py-8 text-muted-foreground">
                 <Briefcase className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                <p>No recommendations yet</p>
-                <p className="text-sm">Add jobs to see personalized suggestions</p>
+                <p>No saved jobs yet</p>
+                <p className="text-sm">Add a job by URL above or open Jobs to add manually</p>
               </div>
             )}
           </CardContent>
@@ -270,45 +270,21 @@ export default function DashboardPage() {
   );
 }
 
-function JobRecommendationCard({ job }: { job: JobWithRecommendation }) {
+function SavedJobPreviewCard({ job }: { job: Job }) {
   return (
     <Link
       to={`/jobs/${job.id}`}
-      className="block p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
+      className="block rounded-lg border bg-card p-4 transition-colors hover:bg-accent/50"
     >
       <div className="flex items-start justify-between gap-4">
-        <div className="flex-1 min-w-0">
-          <h3 className="font-medium truncate">{job.title}</h3>
-          <p className="text-sm text-muted-foreground truncate">{job.company}</p>
-          {job.location && (
-            <p className="text-sm text-muted-foreground">{job.location}</p>
-          )}
+        <div className="min-w-0 flex-1">
+          <h3 className="truncate font-medium">{job.title}</h3>
+          <p className="truncate text-sm text-muted-foreground">{job.company}</p>
+          {job.location && <p className="truncate text-sm text-muted-foreground">{job.location}</p>}
+          <p className="mt-2 text-xs text-muted-foreground">Added {formatRelativeTime(job.createdAt)}</p>
         </div>
-        <div className="flex flex-col items-end gap-2">
-          {job.recommendationScore && (
-            <Badge variant="secondary" className="bg-primary/20 text-primary">
-              {Math.round(job.recommendationScore)}% match
-            </Badge>
-          )}
-          {job.sourceUrl && (
-            <ExternalLink className="h-4 w-4 text-muted-foreground" />
-          )}
-        </div>
+        {job.sourceUrl && <ExternalLink className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />}
       </div>
-      {job.matchedSkills.length > 0 && (
-        <div className="mt-3 flex flex-wrap gap-1">
-          {job.matchedSkills.slice(0, 4).map((skill) => (
-            <Badge key={skill} variant="outline" className="text-xs">
-              {skill}
-            </Badge>
-          ))}
-          {job.matchedSkills.length > 4 && (
-            <Badge variant="outline" className="text-xs">
-              +{job.matchedSkills.length - 4}
-            </Badge>
-          )}
-        </div>
-      )}
     </Link>
   );
 }

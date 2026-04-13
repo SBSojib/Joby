@@ -15,6 +15,8 @@ public class Job : BaseEntity
     
     // Source information
     public string? SourceUrl { get; set; }
+    /// <summary>Full HTML document from the listing URL (when added by URL).</summary>
+    public string? SourcePageHtml { get; set; }
     public string? SourcePlatform { get; set; } // LinkedIn, Indeed, etc.
     public DateTime? PostedDate { get; set; }
     public DateTime? ExpiryDate { get; set; }
@@ -29,6 +31,7 @@ public class Job : BaseEntity
     public User User { get; set; } = null!;
     public Application? Application { get; set; }
     public ICollection<Recommendation> Recommendations { get; set; } = new List<Recommendation>();
+    public ICollection<Reminder> Reminders { get; set; } = new List<Reminder>();
 }
 
 

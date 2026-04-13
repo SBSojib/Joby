@@ -28,7 +28,7 @@ echo "Node.js: OK"
 
 # Start PostgreSQL
 echo -e "\nStarting PostgreSQL..."
-docker-compose up -d postgres
+docker compose --profile local up -d postgres
 
 # Wait for PostgreSQL to be ready
 echo "Waiting for PostgreSQL to be ready..."

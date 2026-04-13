@@ -37,11 +37,20 @@ public class ReminderServiceTests
             LastName = "User"
         };
 
+        var job = new Job
+        {
+            UserId = userId,
+            Title = "Engineer",
+            Company = "Acme"
+        };
+
         _context.Users.Add(user);
+        _context.Jobs.Add(job);
         await _context.SaveChangesAsync();
 
         var request = new CreateReminderRequest
         {
+            JobId = job.Id,
             Title = "Follow up with HR",
             Description = "Send a thank you email",
             DueAt = DateTime.UtcNow.AddDays(3),

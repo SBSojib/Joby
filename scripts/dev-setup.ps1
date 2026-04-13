@@ -28,7 +28,7 @@ Write-Host "Node.js: OK" -ForegroundColor Green
 
 # Start PostgreSQL
 Write-Host "`nStarting PostgreSQL..." -ForegroundColor Yellow
-docker-compose up -d postgres
+docker compose --profile local up -d postgres
 
 # Wait for PostgreSQL to be ready
 Write-Host "Waiting for PostgreSQL to be ready..." -ForegroundColor Yellow
