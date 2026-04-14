@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { authApi, setAccessToken, getAccessToken } from '@/lib/api';
 import type { User, LoginRequest, RegisterRequest } from '@/types';
 
@@ -18,6 +19,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     const initAuth = async () => {
@@ -38,6 +40,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (data: LoginRequest) => {
     const response = await authApi.login(data);
+    // Prevent cross-account stale UI from previously cached queries.
+    queryClient.clear();
     setAccessToken(response.accessToken);
     setUser(response.user);
     navigate('/');
@@ -45,6 +49,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const register = async (data: RegisterRequest) => {
     const response = await authApi.register(data);
+    // New session should start with an empty query cache.
+    queryClient.clear();
     setAccessToken(response.accessToken);
     setUser(response.user);
     navigate('/');
@@ -56,6 +62,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {
       // Ignore errors
     }
+    // Clear cached account-specific data after logout.
+    queryClient.clear();
     setAccessToken(null);
     setUser(null);
     navigate('/');

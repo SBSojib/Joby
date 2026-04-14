@@ -43,6 +43,10 @@ export default function JobsPage() {
     queryKey: ['jobs', 'saved'],
     queryFn: () => jobsApi.search({ page: 1, pageSize: SAVED_JOBS_PAGE_SIZE }),
   });
+  const { data: applications = [] } = useQuery({
+    queryKey: ['applications'],
+    queryFn: applicationsApi.getAll,
+  });
 
   const addJobMutation = useMutation({
     mutationFn: (url: string) => jobsApi.createByUrl(url),
@@ -98,8 +102,12 @@ export default function JobsPage() {
   };
 
   const savedJobs = savedJobsPage?.items ?? [];
-  const totalSaved = savedJobsPage?.totalCount ?? 0;
-  const showingPartial = totalSaved > savedJobs.length;
+  const fallbackJobs = Array.from(
+    new Map(applications.map((app) => [app.job.id, app.job])).values()
+  );
+  const effectiveSavedJobs = savedJobs.length > 0 ? savedJobs : fallbackJobs;
+  const totalSaved = savedJobsPage?.totalCount ?? effectiveSavedJobs.length;
+  const showingPartial = savedJobsPage != null && totalSaved > effectiveSavedJobs.length;
 
   return (
     <div className="space-y-6">
@@ -158,15 +166,15 @@ export default function JobsPage() {
           <div className="flex justify-center py-12">
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           </div>
-        ) : savedJobs.length ? (
+        ) : effectiveSavedJobs.length ? (
           <>
             {showingPartial && (
               <p className="text-sm text-muted-foreground">
-                Showing the {savedJobs.length} most recent of {totalSaved} saved jobs.
+                Showing the {effectiveSavedJobs.length} most recent of {totalSaved} saved jobs.
               </p>
             )}
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {savedJobs.map((job) => (
+              {effectiveSavedJobs.map((job) => (
                 <JobCard
                   key={job.id}
                   job={job}

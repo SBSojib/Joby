@@ -9,9 +9,9 @@ public sealed class GlobalAggregateRateLimitOptions
 
     public bool Enabled { get; set; } = true;
 
-    public int MaxRequestsPer10Minutes { get; set; } = 20;
+    public int MaxRequestsPer10Minutes { get; set; } = 100;
 
-    public int MaxRequestsPerHour { get; set; } = 100;
+    public int MaxRequestsPerHour { get; set; } = 1000;
 
     /// <summary>
     /// Paths that do not count toward the limit (e.g. Docker/K8s liveness).
