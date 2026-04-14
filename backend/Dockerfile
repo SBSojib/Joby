@@ -26,7 +26,7 @@ COPY tests/ tests/
 # Build and publish (same NuGet cache mount as restore — packages live on the mount, not in the image layer)
 WORKDIR /src/src/Api
 RUN --mount=type=cache,target=/root/.nuget/packages \
-    dotnet publish -c Release -o /app/publish --no-restore
+    dotnet publish -c Release -o /app/publish
 
 # Runtime stage
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
