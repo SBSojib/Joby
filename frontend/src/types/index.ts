@@ -14,6 +14,11 @@ export interface AuthResponse {
   user: User;
 }
 
+export interface RegisterPendingResponse {
+  email: string;
+  message: string;
+}
+
 export interface LoginRequest {
   email: string;
   password: string;
@@ -24,6 +29,11 @@ export interface RegisterRequest {
   password: string;
   firstName: string;
   lastName: string;
+}
+
+export interface VerifyEmailRequest {
+  email: string;
+  code: string;
 }
 
 // Profile types

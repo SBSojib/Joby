@@ -3,6 +3,8 @@ import type {
   AuthResponse,
   LoginRequest,
   RegisterRequest,
+  RegisterPendingResponse,
+  VerifyEmailRequest,
   User,
   Profile,
   Resume,
@@ -82,9 +84,18 @@ api.interceptors.response.use(
 
 // Auth API
 export const authApi = {
-  register: async (data: RegisterRequest): Promise<AuthResponse> => {
-    const response = await api.post<AuthResponse>('/auth/register', data);
+  register: async (data: RegisterRequest): Promise<RegisterPendingResponse> => {
+    const response = await api.post<RegisterPendingResponse>('/auth/register', data);
     return response.data;
+  },
+
+  verifyEmail: async (data: VerifyEmailRequest): Promise<AuthResponse> => {
+    const response = await api.post<AuthResponse>('/auth/verify-email', data);
+    return response.data;
+  },
+
+  resendVerification: async (email: string): Promise<void> => {
+    await api.post('/auth/resend-verification', { email });
   },
 
   login: async (data: LoginRequest): Promise<AuthResponse> => {

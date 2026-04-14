@@ -7,6 +7,9 @@ public class User : BaseEntity
     public string FirstName { get; set; } = string.Empty;
     public string LastName { get; set; } = string.Empty;
     public bool IsEmailVerified { get; set; }
+    public string? EmailVerificationCodeHash { get; set; }
+    public DateTime? EmailVerificationCodeExpiresAt { get; set; }
+    public DateTime? EmailVerificationCodeSentAt { get; set; }
     public DateTime? LastLoginAt { get; set; }
     
     // User preferences

@@ -8,6 +8,7 @@ using Joby.Domain.Entities;
 using Joby.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 
 namespace Joby.Infrastructure.Services;
@@ -16,41 +17,135 @@ public class AuthService : IAuthService
 {
     private readonly ApplicationDbContext _context;
     private readonly IConfiguration _configuration;
+    private readonly IEmailSender _emailSender;
+    private readonly ILogger<AuthService> _logger;
 
-    public AuthService(ApplicationDbContext context, IConfiguration configuration)
+    public AuthService(
+        ApplicationDbContext context,
+        IConfiguration configuration,
+        IEmailSender emailSender,
+        ILogger<AuthService> logger)
     {
         _context = context;
         _configuration = configuration;
+        _emailSender = emailSender;
+        _logger = logger;
     }
 
-    public async Task<AuthResponse> RegisterAsync(RegisterRequest request, string ipAddress)
+    public async Task<RegisterPendingResponse> RegisterAsync(RegisterRequest request)
     {
-        if (await _context.Users.AnyAsync(u => u.Email.ToLower() == request.Email.ToLower()))
+        var email = request.Email.Trim().ToLowerInvariant();
+        if (await _context.Users.AnyAsync(u => u.Email == email))
         {
             throw new InvalidOperationException("Email is already registered");
         }
 
+        var (verificationCode, codeHash, expiresAt) = GenerateVerificationCode();
         var user = new User
         {
-            Email = request.Email.ToLower(),
+            Email = email,
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
             FirstName = request.FirstName,
-            LastName = request.LastName
-        };
-
-        // Create default profile
-        var profile = new Profile
-        {
-            UserId = user.Id,
-            Email = user.Email,
-            FullName = $"{user.FirstName} {user.LastName}"
+            LastName = request.LastName,
+            IsEmailVerified = false,
+            EmailVerificationCodeHash = codeHash,
+            EmailVerificationCodeExpiresAt = expiresAt,
+            EmailVerificationCodeSentAt = DateTime.UtcNow
         };
 
         _context.Users.Add(user);
-        _context.Profiles.Add(profile);
         await _context.SaveChangesAsync();
 
+        await SendVerificationCodeEmailAsync(user.Email, verificationCode);
+
+        return new RegisterPendingResponse
+        {
+            Email = user.Email,
+            Message = "Verification code sent to your email. Please verify to continue."
+        };
+    }
+
+    public async Task<AuthResponse> VerifyEmailAsync(VerifyEmailRequest request, string ipAddress)
+    {
+        var email = request.Email.Trim().ToLowerInvariant();
+        var user = await _context.Users
+            .Include(u => u.Profile)
+            .FirstOrDefaultAsync(u => u.Email == email);
+
+        if (user == null)
+        {
+            throw new KeyNotFoundException("Account not found");
+        }
+
+        if (user.IsEmailVerified)
+        {
+            throw new InvalidOperationException("Email is already verified");
+        }
+
+        if (string.IsNullOrWhiteSpace(user.EmailVerificationCodeHash) || user.EmailVerificationCodeExpiresAt == null)
+        {
+            throw new InvalidOperationException("Verification code is not available. Please request a new code.");
+        }
+
+        if (user.EmailVerificationCodeExpiresAt < DateTime.UtcNow)
+        {
+            throw new InvalidOperationException("Verification code has expired. Please request a new code.");
+        }
+
+        if (!BCrypt.Net.BCrypt.Verify(request.Code, user.EmailVerificationCodeHash))
+        {
+            throw new UnauthorizedAccessException("Invalid verification code");
+        }
+
+        user.IsEmailVerified = true;
+        user.EmailVerificationCodeHash = null;
+        user.EmailVerificationCodeExpiresAt = null;
+        user.EmailVerificationCodeSentAt = null;
+        user.LastLoginAt = DateTime.UtcNow;
+
+        if (user.Profile == null)
+        {
+            _context.Profiles.Add(new Profile
+            {
+                UserId = user.Id,
+                Email = user.Email,
+                FullName = $"{user.FirstName} {user.LastName}"
+            });
+        }
+
+        await _context.SaveChangesAsync();
         return await GenerateAuthResponse(user, ipAddress);
+    }
+
+    public async Task ResendVerificationCodeAsync(ResendVerificationRequest request)
+    {
+        var email = request.Email.Trim().ToLowerInvariant();
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
+
+        if (user == null)
+        {
+            throw new KeyNotFoundException("Account not found");
+        }
+
+        if (user.IsEmailVerified)
+        {
+            throw new InvalidOperationException("Email is already verified");
+        }
+
+        var cooldownSeconds = GetVerificationResendCooldownSeconds();
+        if (user.EmailVerificationCodeSentAt.HasValue
+            && user.EmailVerificationCodeSentAt.Value.AddSeconds(cooldownSeconds) > DateTime.UtcNow)
+        {
+            throw new InvalidOperationException($"Please wait {cooldownSeconds} seconds before requesting another code.");
+        }
+
+        var (verificationCode, codeHash, expiresAt) = GenerateVerificationCode();
+        user.EmailVerificationCodeHash = codeHash;
+        user.EmailVerificationCodeExpiresAt = expiresAt;
+        user.EmailVerificationCodeSentAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+
+        await SendVerificationCodeEmailAsync(user.Email, verificationCode);
     }
 
     public async Task<AuthResponse> LoginAsync(LoginRequest request, string ipAddress)
@@ -61,6 +156,11 @@ public class AuthService : IAuthService
         if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
         {
             throw new UnauthorizedAccessException("Invalid email or password");
+        }
+
+        if (!user.IsEmailVerified)
+        {
+            throw new UnauthorizedAccessException("Email is not verified. Please verify your email first.");
         }
 
         user.LastLoginAt = DateTime.UtcNow;
@@ -205,6 +305,34 @@ public class AuthService : IAuthService
 
     private int GetRefreshTokenExpirationDays() =>
         int.Parse(_configuration["Jwt:RefreshTokenExpirationDays"] ?? "7");
+
+    private int GetVerificationCodeExpirationMinutes() =>
+        int.Parse(_configuration["Auth:EmailVerificationCodeExpirationMinutes"] ?? "10");
+
+    private int GetVerificationResendCooldownSeconds() =>
+        int.Parse(_configuration["Auth:EmailVerificationResendCooldownSeconds"] ?? "60");
+
+    private (string Code, string CodeHash, DateTime ExpiresAt) GenerateVerificationCode()
+    {
+        var code = RandomNumberGenerator.GetInt32(100000, 1000000).ToString();
+        var codeHash = BCrypt.Net.BCrypt.HashPassword(code);
+        var expiresAt = DateTime.UtcNow.AddMinutes(GetVerificationCodeExpirationMinutes());
+        return (code, codeHash, expiresAt);
+    }
+
+    private async Task SendVerificationCodeEmailAsync(string email, string code)
+    {
+        var subject = "Verify your Joby account";
+        var textBody =
+            $"Your Joby verification code is {code}. " +
+            $"It expires in {GetVerificationCodeExpirationMinutes()} minutes.";
+
+        var sent = await _emailSender.TrySendAsync(email, subject, textBody);
+        if (!sent)
+        {
+            _logger.LogWarning("Verification email could not be sent to {Email}", email);
+        }
+    }
 
     private static UserDto MapToUserDto(User user) => new()
     {

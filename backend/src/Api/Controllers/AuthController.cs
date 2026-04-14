@@ -18,12 +18,26 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("register")]
-    public async Task<ActionResult<AuthResponse>> Register([FromBody] RegisterRequest request)
+    public async Task<ActionResult<RegisterPendingResponse>> Register([FromBody] RegisterRequest request)
+    {
+        var response = await _authService.RegisterAsync(request);
+        return Ok(response);
+    }
+
+    [HttpPost("verify-email")]
+    public async Task<ActionResult<AuthResponse>> VerifyEmail([FromBody] VerifyEmailRequest request)
     {
         var ipAddress = GetIpAddress();
-        var response = await _authService.RegisterAsync(request, ipAddress);
+        var response = await _authService.VerifyEmailAsync(request, ipAddress);
         SetRefreshTokenCookie(response.RefreshToken);
         return Ok(response);
+    }
+
+    [HttpPost("resend-verification")]
+    public async Task<IActionResult> ResendVerification([FromBody] ResendVerificationRequest request)
+    {
+        await _authService.ResendVerificationCodeAsync(request);
+        return Ok(new { message = "Verification code sent." });
     }
 
     [HttpPost("login")]

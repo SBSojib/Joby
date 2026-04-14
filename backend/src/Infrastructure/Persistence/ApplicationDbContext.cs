@@ -32,6 +32,7 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.PasswordHash).IsRequired();
             entity.Property(e => e.FirstName).HasMaxLength(100).IsRequired();
             entity.Property(e => e.LastName).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.EmailVerificationCodeHash).HasMaxLength(200);
 
             entity.HasOne(e => e.Profile)
                 .WithOne(p => p.User)

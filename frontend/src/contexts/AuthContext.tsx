@@ -2,14 +2,16 @@ import { createContext, useContext, useEffect, useState, ReactNode } from 'react
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { authApi, setAccessToken, getAccessToken } from '@/lib/api';
-import type { User, LoginRequest, RegisterRequest } from '@/types';
+import type { User, LoginRequest, RegisterRequest, RegisterPendingResponse } from '@/types';
 
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   isAuthenticated: boolean;
   login: (data: LoginRequest) => Promise<void>;
-  register: (data: RegisterRequest) => Promise<void>;
+  register: (data: RegisterRequest) => Promise<RegisterPendingResponse>;
+  verifyEmail: (email: string, code: string) => Promise<void>;
+  resendVerificationCode: (email: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -48,12 +50,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const register = async (data: RegisterRequest) => {
-    const response = await authApi.register(data);
+    return authApi.register(data);
+  };
+
+  const verifyEmail = async (email: string, code: string) => {
+    const response = await authApi.verifyEmail({ email, code });
     // New session should start with an empty query cache.
     queryClient.clear();
     setAccessToken(response.accessToken);
     setUser(response.user);
     navigate('/');
+  };
+
+  const resendVerificationCode = async (email: string) => {
+    await authApi.resendVerification(email);
   };
 
   const logout = async () => {
@@ -77,6 +87,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isAuthenticated: !!user,
         login,
         register,
+        verifyEmail,
+        resendVerificationCode,
         logout,
       }}
     >

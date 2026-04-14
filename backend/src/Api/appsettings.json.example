@@ -9,6 +9,10 @@
     "AccessTokenExpirationMinutes": 60,
     "RefreshTokenExpirationDays": 7
   },
+  "Auth": {
+    "EmailVerificationCodeExpirationMinutes": 10,
+    "EmailVerificationResendCooldownSeconds": 60
+  },
   "Cors": {
     "AllowedOrigins": [
       "http://localhost:5173",
