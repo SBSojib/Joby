@@ -16,6 +16,7 @@ import type {
   ApplicationStatus,
   Reminder,
   PagedResult,
+  AdminUser,
 } from '@/types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
@@ -324,6 +325,18 @@ export const remindersApi = {
   dismiss: async (id: string): Promise<Reminder> => {
     const response = await api.put<Reminder>(`/reminders/${id}/dismiss`);
     return response.data;
+  },
+};
+
+// Admin API
+export const adminApi = {
+  getUsers: async (): Promise<AdminUser[]> => {
+    const response = await api.get<AdminUser[]>('/admin/users');
+    return response.data;
+  },
+
+  deleteUser: async (userId: string): Promise<void> => {
+    await api.delete(`/admin/users/${userId}`);
   },
 };
 

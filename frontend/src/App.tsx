@@ -19,6 +19,7 @@ import JobDetailPage from '@/pages/JobDetailPage';
 import ApplicationsPage from '@/pages/ApplicationsPage';
 import ApplicationDetailPage from '@/pages/ApplicationDetailPage';
 import RemindersPage from '@/pages/RemindersPage';
+import AdminPage from '@/pages/AdminPage';
 
 function LoadingSpinner() {
   return (
@@ -78,6 +79,7 @@ function App() {
         <Route path="applications" element={<ApplicationsPage />} />
         <Route path="applications/:applicationId" element={<ApplicationDetailPage />} />
         <Route path="reminders" element={<RemindersPage />} />
+        <Route path="admin" element={<AdminPage />} />
       </Route>
     </Routes>
   );

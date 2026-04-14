@@ -363,14 +363,18 @@ public class AuthService : IAuthService
         return sent;
     }
 
-    private static UserDto MapToUserDto(User user) => new()
+    private UserDto MapToUserDto(User user) => new()
     {
         Id = user.Id,
         Email = user.Email,
         FirstName = user.FirstName,
         LastName = user.LastName,
+        IsAdmin = user.Email == GetRootAdminEmail(),
         DefaultFollowUpDays = user.DefaultFollowUpDays
     };
+
+    private string GetRootAdminEmail() =>
+        (_configuration["Admin:RootEmail"] ?? string.Empty).Trim().ToLowerInvariant();
 }
 
 

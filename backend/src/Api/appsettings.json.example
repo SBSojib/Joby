@@ -13,6 +13,9 @@
     "EmailVerificationCodeExpirationMinutes": 10,
     "EmailVerificationResendCooldownSeconds": 60
   },
+  "Admin": {
+    "RootEmail": "admin@example.com"
+  },
   "Cors": {
     "AllowedOrigins": [
       "http://localhost:5173",

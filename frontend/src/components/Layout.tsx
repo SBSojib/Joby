@@ -7,6 +7,7 @@ import {
   FileText,
   User,
   Bell,
+  Shield,
   LogOut,
   Menu,
   X,
@@ -14,14 +15,6 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
-
-const navItems: { to: string; icon: LucideIcon; label: string; end?: boolean }[] = [
-  { to: '/', icon: LayoutDashboard, label: 'Dashboard', end: true },
-  { to: '/jobs', icon: Briefcase, label: 'Jobs' },
-  { to: '/applications', icon: FileText, label: 'Applications' },
-  { to: '/reminders', icon: Bell, label: 'Reminders' },
-  { to: '/profile', icon: User, label: 'Profile' },
-];
 
 function sidebarLinkActive(pathname: string, to: string, end?: boolean): boolean {
   return matchPath({ path: to, end: end ?? false }, pathname) != null;
@@ -32,6 +25,15 @@ export default function Layout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  const navItems: { to: string; icon: LucideIcon; label: string; end?: boolean }[] = [
+    { to: '/', icon: LayoutDashboard, label: 'Dashboard', end: true },
+    { to: '/jobs', icon: Briefcase, label: 'Jobs' },
+    { to: '/applications', icon: FileText, label: 'Applications' },
+    { to: '/reminders', icon: Bell, label: 'Reminders' },
+    { to: '/profile', icon: User, label: 'Profile' },
+    ...(user?.isAdmin ? [{ to: '/admin', icon: Shield, label: 'Admin' }] : []),
+  ];
 
   const handleLogout = async () => {
     await logout();

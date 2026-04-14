@@ -72,6 +72,7 @@ public static class DependencyInjection
         services.AddScoped<IApplicationService, ApplicationService>();
         services.AddScoped<IReminderService, ReminderService>();
         services.AddScoped<IRecommendationService, RecommendationService>();
+        services.AddScoped<IAdminService, AdminService>();
         services.AddScoped<IResumeParser, ResumeParser>();
 
         services.Configure<EmailSettings>(configuration.GetSection(EmailSettings.SectionName));

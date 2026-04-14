@@ -4,7 +4,20 @@ export interface User {
   email: string;
   firstName: string;
   lastName: string;
+  isAdmin: boolean;
   defaultFollowUpDays: number;
+}
+
+export interface AdminUser {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  isEmailVerified: boolean;
+  isRootAdmin: boolean;
+  createdAt: string;
+  updatedAt: string;
+  lastLoginAt?: string;
 }
 
 export interface AuthResponse {
