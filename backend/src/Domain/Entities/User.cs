@@ -10,6 +10,9 @@ public class User : BaseEntity
     public string? EmailVerificationCodeHash { get; set; }
     public DateTime? EmailVerificationCodeExpiresAt { get; set; }
     public DateTime? EmailVerificationCodeSentAt { get; set; }
+    public string? PasswordResetCodeHash { get; set; }
+    public DateTime? PasswordResetCodeExpiresAt { get; set; }
+    public DateTime? PasswordResetCodeSentAt { get; set; }
     public DateTime? LastLoginAt { get; set; }
     
     // User preferences

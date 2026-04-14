@@ -11,7 +11,9 @@
   },
   "Auth": {
     "EmailVerificationCodeExpirationMinutes": 10,
-    "EmailVerificationResendCooldownSeconds": 60
+    "EmailVerificationResendCooldownSeconds": 60,
+    "PasswordResetCodeExpirationMinutes": 10,
+    "PasswordResetResendCooldownSeconds": 60
   },
   "Admin": {
     "RootEmail": "admin@example.com"

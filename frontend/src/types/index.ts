@@ -53,6 +53,16 @@ export interface VerifyEmailRequest {
   code: string;
 }
 
+export interface ForgotPasswordRequest {
+  email: string;
+}
+
+export interface ResetPasswordRequest {
+  email: string;
+  code: string;
+  newPassword: string;
+}
+
 // Profile types
 export interface Profile {
   id: string;

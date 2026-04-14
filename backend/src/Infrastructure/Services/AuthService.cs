@@ -158,6 +158,76 @@ public class AuthService : IAuthService
         }
     }
 
+    public async Task RequestPasswordResetAsync(ForgotPasswordRequest request)
+    {
+        var email = request.Email.Trim().ToLowerInvariant();
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
+        if (user == null)
+        {
+            return;
+        }
+
+        var cooldownSeconds = GetPasswordResetResendCooldownSeconds();
+        if (user.PasswordResetCodeSentAt.HasValue
+            && user.PasswordResetCodeSentAt.Value.AddSeconds(cooldownSeconds) > DateTime.UtcNow)
+        {
+            throw new InvalidOperationException($"Please wait {cooldownSeconds} seconds before requesting another code.");
+        }
+
+        var (resetCode, codeHash, expiresAt) = GeneratePasswordResetCode();
+        user.PasswordResetCodeHash = codeHash;
+        user.PasswordResetCodeExpiresAt = expiresAt;
+        user.PasswordResetCodeSentAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+
+        var sent = await SendPasswordResetCodeEmailAsync(user.Email, resetCode);
+        if (!sent)
+        {
+            throw new InvalidOperationException("Could not send reset code email. Please check email settings and try again.");
+        }
+    }
+
+    public async Task ResetPasswordAsync(ResetPasswordRequest request)
+    {
+        var email = request.Email.Trim().ToLowerInvariant();
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
+        if (user == null)
+        {
+            throw new UnauthorizedAccessException("Invalid email or reset code");
+        }
+
+        if (string.IsNullOrWhiteSpace(user.PasswordResetCodeHash) || user.PasswordResetCodeExpiresAt == null)
+        {
+            throw new InvalidOperationException("Reset code is not available. Please request a new code.");
+        }
+
+        if (user.PasswordResetCodeExpiresAt < DateTime.UtcNow)
+        {
+            throw new InvalidOperationException("Reset code has expired. Please request a new code.");
+        }
+
+        if (!BCrypt.Net.BCrypt.Verify(request.Code, user.PasswordResetCodeHash))
+        {
+            throw new UnauthorizedAccessException("Invalid email or reset code");
+        }
+
+        user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
+        user.PasswordResetCodeHash = null;
+        user.PasswordResetCodeExpiresAt = null;
+        user.PasswordResetCodeSentAt = null;
+
+        var activeTokens = await _context.RefreshTokens
+            .Where(t => t.UserId == user.Id && t.RevokedAt == null && t.ExpiresAt > DateTime.UtcNow)
+            .ToListAsync();
+        foreach (var token in activeTokens)
+        {
+            token.RevokedAt = DateTime.UtcNow;
+            token.ReasonRevoked = "Password reset";
+        }
+
+        await _context.SaveChangesAsync();
+    }
+
     public async Task DeleteAccountAsync(Guid userId, string password, string ipAddress)
     {
         var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
@@ -340,11 +410,25 @@ public class AuthService : IAuthService
     private int GetVerificationResendCooldownSeconds() =>
         int.Parse(_configuration["Auth:EmailVerificationResendCooldownSeconds"] ?? "60");
 
+    private int GetPasswordResetCodeExpirationMinutes() =>
+        int.Parse(_configuration["Auth:PasswordResetCodeExpirationMinutes"] ?? "10");
+
+    private int GetPasswordResetResendCooldownSeconds() =>
+        int.Parse(_configuration["Auth:PasswordResetResendCooldownSeconds"] ?? "60");
+
     private (string Code, string CodeHash, DateTime ExpiresAt) GenerateVerificationCode()
     {
         var code = RandomNumberGenerator.GetInt32(100000, 1000000).ToString();
         var codeHash = BCrypt.Net.BCrypt.HashPassword(code);
         var expiresAt = DateTime.UtcNow.AddMinutes(GetVerificationCodeExpirationMinutes());
+        return (code, codeHash, expiresAt);
+    }
+
+    private (string Code, string CodeHash, DateTime ExpiresAt) GeneratePasswordResetCode()
+    {
+        var code = RandomNumberGenerator.GetInt32(100000, 1000000).ToString();
+        var codeHash = BCrypt.Net.BCrypt.HashPassword(code);
+        var expiresAt = DateTime.UtcNow.AddMinutes(GetPasswordResetCodeExpirationMinutes());
         return (code, codeHash, expiresAt);
     }
 
@@ -360,6 +444,22 @@ public class AuthService : IAuthService
         {
             _logger.LogWarning("Verification email could not be sent to {Email}", email);
         }
+        return sent;
+    }
+
+    private async Task<bool> SendPasswordResetCodeEmailAsync(string email, string code)
+    {
+        var subject = "Reset your Joby password";
+        var textBody =
+            $"Your Joby password reset code is {code}. " +
+            $"It expires in {GetPasswordResetCodeExpirationMinutes()} minutes.";
+
+        var sent = await _emailSender.TrySendAsync(email, subject, textBody);
+        if (!sent)
+        {
+            _logger.LogWarning("Password reset email could not be sent to {Email}", email);
+        }
+
         return sent;
     }
 

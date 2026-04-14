@@ -6,6 +6,8 @@ import type {
   RegisterRequest,
   RegisterPendingResponse,
   VerifyEmailRequest,
+  ForgotPasswordRequest,
+  ResetPasswordRequest,
   User,
   Profile,
   Resume,
@@ -128,6 +130,16 @@ export const authApi = {
 
   me: async (): Promise<User> => {
     const response = await api.get<User>('/auth/me');
+    return response.data;
+  },
+
+  forgotPassword: async (data: ForgotPasswordRequest): Promise<{ message: string }> => {
+    const response = await api.post<{ message: string }>('/auth/forgot-password', data);
+    return response.data;
+  },
+
+  resetPassword: async (data: ResetPasswordRequest): Promise<{ message: string }> => {
+    const response = await api.post<{ message: string }>('/auth/reset-password', data);
     return response.data;
   },
 };
