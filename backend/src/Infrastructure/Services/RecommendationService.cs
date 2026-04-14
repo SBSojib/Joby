@@ -30,9 +30,9 @@ public class RecommendationService : IRecommendationService
             var userSkills = JsonSerializer.Deserialize<List<string>>(profile.SkillsJson) ?? new();
             var userKeywords = JsonSerializer.Deserialize<List<string>>(profile.KeywordsJson) ?? new();
 
-            // Get all jobs (we could filter to only jobs without applications)
+            // Only score jobs that belong to this user.
             var jobs = await _context.Jobs
-                .Where(j => j.Application == null) // Only jobs user hasn't applied to
+                .Where(j => j.UserId == userId && j.Application == null) // Only jobs this user hasn't applied to
                 .ToListAsync();
 
             foreach (var job in jobs)
@@ -90,7 +90,7 @@ public class RecommendationService : IRecommendationService
         var recommendations = await _context.Recommendations
             .Include(r => r.Job)
                 .ThenInclude(j => j.Application)
-            .Where(r => r.UserId == userId && r.IsActive && r.Job.Application == null)
+            .Where(r => r.UserId == userId && r.IsActive && r.Job.UserId == userId && r.Job.Application == null)
             .OrderByDescending(r => r.Score)
             .Take(count)
             .ToListAsync();

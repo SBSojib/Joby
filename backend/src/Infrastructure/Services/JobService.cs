@@ -212,7 +212,7 @@ public class JobService : IJobService
         var query = _context.Recommendations
             .Include(r => r.Job)
                 .ThenInclude(j => j.Application)
-            .Where(r => r.UserId == userId && r.IsActive)
+            .Where(r => r.UserId == userId && r.IsActive && r.Job.UserId == userId)
             .OrderByDescending(r => r.Score);
 
         var totalCount = await query.CountAsync();
