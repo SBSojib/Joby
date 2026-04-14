@@ -2,6 +2,7 @@ import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import type {
   AuthResponse,
   LoginRequest,
+  DeleteAccountRequest,
   RegisterRequest,
   RegisterPendingResponse,
   VerifyEmailRequest,
@@ -63,8 +64,16 @@ api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
+    const requestPath = originalRequest?.url ?? '';
+    const isAuthEndpoint =
+      requestPath.includes('/auth/login') ||
+      requestPath.includes('/auth/register') ||
+      requestPath.includes('/auth/verify-email') ||
+      requestPath.includes('/auth/resend-verification') ||
+      requestPath.includes('/auth/refresh');
+    const hasAccessToken = !!getAccessToken();
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    if (error.response?.status === 401 && !originalRequest._retry && hasAccessToken && !isAuthEndpoint) {
       originalRequest._retry = true;
 
       try {
@@ -105,6 +114,10 @@ export const authApi = {
 
   logout: async (): Promise<void> => {
     await api.post('/auth/logout');
+  },
+
+  deleteAccount: async (data: DeleteAccountRequest): Promise<void> => {
+    await api.delete('/auth/account', { data });
   },
 
   refresh: async (): Promise<AuthResponse> => {

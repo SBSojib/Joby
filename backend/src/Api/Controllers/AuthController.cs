@@ -80,6 +80,17 @@ public class AuthController : ControllerBase
         return Ok(new { message = "Logged out successfully" });
     }
 
+    [HttpDelete("account")]
+    [Authorize]
+    public async Task<IActionResult> DeleteAccount([FromBody] DeleteAccountRequest request)
+    {
+        var userId = GetUserId();
+        var ipAddress = GetIpAddress();
+        await _authService.DeleteAccountAsync(userId, request.Password, ipAddress);
+        Response.Cookies.Delete("refreshToken");
+        return Ok(new { message = "Account deleted successfully" });
+    }
+
     [HttpGet("me")]
     [Authorize]
     public async Task<ActionResult<UserDto>> GetCurrentUser()

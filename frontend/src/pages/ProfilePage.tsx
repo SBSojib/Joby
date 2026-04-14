@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { profileApi } from '@/lib/api';
+import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -23,8 +24,11 @@ import type { Profile, Resume } from '@/types';
 
 export default function ProfilePage() {
   const queryClient = useQueryClient();
+  const { deleteAccount } = useAuth();
   const [newSkill, setNewSkill] = useState('');
   const [newKeyword, setNewKeyword] = useState('');
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
 
   const { data: profile, isLoading } = useQuery({
     queryKey: ['profile'],
@@ -131,6 +135,32 @@ export default function ProfilePage() {
 
   const onSubmit = (data: Partial<Profile>) => {
     updateProfileMutation.mutate(data);
+  };
+
+  const canDeleteAccount = deletePassword.trim().length > 0 && deleteConfirmText === 'DELETE';
+
+  const handleDeleteAccount = async () => {
+    if (!canDeleteAccount) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      'This will permanently delete your account and all related data. This action cannot be undone. Continue?'
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      await deleteAccount(deletePassword);
+      toast({ title: 'Account deleted', description: 'Your account and related data were removed.' });
+    } catch {
+      toast({
+        variant: 'destructive',
+        title: 'Delete failed',
+        description: 'Could not delete your account. Check your password and try again.',
+      });
+    }
   };
 
   if (isLoading) {
@@ -371,6 +401,41 @@ export default function ProfilePage() {
                 <p className="text-sm text-muted-foreground">No keywords added yet</p>
               )}
             </div>
+          </CardContent>
+        </Card>
+
+        {/* Danger Zone */}
+        <Card className="border-destructive/40">
+          <CardHeader>
+            <CardTitle className="text-destructive">Danger Zone</CardTitle>
+            <CardDescription>
+              Permanently delete your account and all associated data (jobs, applications, reminders, profile, resumes,
+              tokens). This cannot be undone.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="deletePassword">Confirm password</Label>
+              <Input
+                id="deletePassword"
+                type="password"
+                placeholder="Enter your password"
+                value={deletePassword}
+                onChange={(e) => setDeletePassword(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="deleteConfirmText">Type DELETE to confirm</Label>
+              <Input
+                id="deleteConfirmText"
+                placeholder="DELETE"
+                value={deleteConfirmText}
+                onChange={(e) => setDeleteConfirmText(e.target.value)}
+              />
+            </div>
+            <Button variant="destructive" disabled={!canDeleteAccount} onClick={handleDeleteAccount}>
+              Delete account permanently
+            </Button>
           </CardContent>
         </Card>
       </div>

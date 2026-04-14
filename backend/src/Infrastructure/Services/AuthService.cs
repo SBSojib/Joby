@@ -56,7 +56,13 @@ public class AuthService : IAuthService
         _context.Users.Add(user);
         await _context.SaveChangesAsync();
 
-        await SendVerificationCodeEmailAsync(user.Email, verificationCode);
+        var sent = await SendVerificationCodeEmailAsync(user.Email, verificationCode);
+        if (!sent)
+        {
+            _context.Users.Remove(user);
+            await _context.SaveChangesAsync();
+            throw new InvalidOperationException("Could not send verification email. Please check email settings and try again.");
+        }
 
         return new RegisterPendingResponse
         {
@@ -145,7 +151,29 @@ public class AuthService : IAuthService
         user.EmailVerificationCodeSentAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
 
-        await SendVerificationCodeEmailAsync(user.Email, verificationCode);
+        var sent = await SendVerificationCodeEmailAsync(user.Email, verificationCode);
+        if (!sent)
+        {
+            throw new InvalidOperationException("Could not send verification email. Please check email settings and try again.");
+        }
+    }
+
+    public async Task DeleteAccountAsync(Guid userId, string password, string ipAddress)
+    {
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
+        if (user == null)
+        {
+            throw new KeyNotFoundException("User not found");
+        }
+
+        if (!BCrypt.Net.BCrypt.Verify(password, user.PasswordHash))
+        {
+            throw new UnauthorizedAccessException("Invalid password");
+        }
+
+        _logger.LogInformation("Deleting account for user {UserId} from IP {IpAddress}", userId, ipAddress);
+        _context.Users.Remove(user);
+        await _context.SaveChangesAsync();
     }
 
     public async Task<AuthResponse> LoginAsync(LoginRequest request, string ipAddress)
@@ -320,7 +348,7 @@ public class AuthService : IAuthService
         return (code, codeHash, expiresAt);
     }
 
-    private async Task SendVerificationCodeEmailAsync(string email, string code)
+    private async Task<bool> SendVerificationCodeEmailAsync(string email, string code)
     {
         var subject = "Verify your Joby account";
         var textBody =
@@ -332,6 +360,7 @@ public class AuthService : IAuthService
         {
             _logger.LogWarning("Verification email could not be sent to {Email}", email);
         }
+        return sent;
     }
 
     private static UserDto MapToUserDto(User user) => new()

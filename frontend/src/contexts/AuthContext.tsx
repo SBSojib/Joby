@@ -12,6 +12,7 @@ interface AuthContextType {
   register: (data: RegisterRequest) => Promise<RegisterPendingResponse>;
   verifyEmail: (email: string, code: string) => Promise<void>;
   resendVerificationCode: (email: string) => Promise<void>;
+  deleteAccount: (password: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -66,6 +67,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await authApi.resendVerification(email);
   };
 
+  const deleteAccount = async (password: string) => {
+    await authApi.deleteAccount({ password });
+    queryClient.clear();
+    setAccessToken(null);
+    setUser(null);
+    navigate('/');
+  };
+
   const logout = async () => {
     try {
       await authApi.logout();
@@ -89,6 +98,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         register,
         verifyEmail,
         resendVerificationCode,
+        deleteAccount,
         logout,
       }}
     >

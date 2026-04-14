@@ -24,6 +24,10 @@ export interface LoginRequest {
   password: string;
 }
 
+export interface DeleteAccountRequest {
+  password: string;
+}
+
 export interface RegisterRequest {
   email: string;
   password: string;
