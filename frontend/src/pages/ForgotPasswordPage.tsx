@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -43,6 +43,7 @@ type ResetForm = z.infer<typeof resetSchema>;
 export default function ForgotPasswordPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [pendingEmail, setPendingEmail] = useState<string | null>(null);
+  const navigate = useNavigate();
 
   const requestForm = useForm<RequestForm>({
     resolver: zodResolver(requestSchema),
@@ -81,6 +82,7 @@ export default function ForgotPasswordPage() {
         newPassword: data.newPassword,
       });
       toast({ title: 'Password reset successful', description: response.message });
+      navigate('/login', { replace: true });
     } catch (error) {
       const axiosError = error as AxiosError<ApiError>;
       toast({
