@@ -6,6 +6,9 @@ export interface User {
   lastName: string;
   isAdmin: boolean;
   defaultFollowUpDays: number;
+  /** Present when a root admin is viewing the app as another user. */
+  impersonatorUserId?: string;
+  impersonatorEmail?: string;
 }
 
 export interface AdminUser {

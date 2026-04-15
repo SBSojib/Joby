@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { authApi, setAccessToken, getAccessToken } from '@/lib/api';
+import { authApi, adminApi, setAccessToken, getAccessToken } from '@/lib/api';
 import type { User, LoginRequest, RegisterRequest, RegisterPendingResponse } from '@/types';
 
 interface AuthContextType {
@@ -14,6 +14,8 @@ interface AuthContextType {
   resendVerificationCode: (email: string) => Promise<void>;
   deleteAccount: (password: string) => Promise<void>;
   logout: () => Promise<void>;
+  stopImpersonation: () => Promise<void>;
+  impersonateUser: (userId: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -88,6 +90,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     navigate('/');
   };
 
+  const stopImpersonation = async () => {
+    const response = await authApi.stopImpersonation();
+    queryClient.clear();
+    setAccessToken(response.accessToken);
+    setUser(response.user);
+    navigate('/');
+  };
+
+  const impersonateUser = async (userId: string) => {
+    const response = await adminApi.impersonateUser(userId);
+    queryClient.clear();
+    setAccessToken(response.accessToken);
+    setUser(response.user);
+    navigate('/');
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -100,6 +118,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         resendVerificationCode,
         deleteAccount,
         logout,
+        stopImpersonation,
+        impersonateUser,
       }}
     >
       {children}

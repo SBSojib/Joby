@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Joby.Application.DTOs.Auth;
 using Joby.Application.Interfaces;
+using Joby.Application.Security;
 using Joby.Domain.Entities;
 using Joby.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -290,12 +291,29 @@ public class AuthService : IAuthService
 
         var newRefreshToken = GenerateRefreshToken(ipAddress);
         newRefreshToken.UserId = token.UserId;
+        newRefreshToken.ImpersonatedUserId = token.ImpersonatedUserId;
         token.ReplacedByToken = newRefreshToken.Token;
 
         _context.RefreshTokens.Add(newRefreshToken);
         await _context.SaveChangesAsync();
 
-        var accessToken = GenerateAccessToken(token.User);
+        User subjectUser = token.User;
+        Guid? impersonatorId = null;
+        string? impersonatorEmail = null;
+        if (token.ImpersonatedUserId is { } impersonatedId)
+        {
+            var impersonated = await _context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == impersonatedId);
+            if (impersonated == null)
+            {
+                throw new UnauthorizedAccessException("Invalid token");
+            }
+
+            subjectUser = impersonated;
+            impersonatorId = token.UserId;
+            impersonatorEmail = token.User.Email;
+        }
+
+        var accessToken = GenerateAccessToken(subjectUser, impersonatorId);
         var expiresAt = DateTime.UtcNow.AddMinutes(GetAccessTokenExpirationMinutes());
 
         return new AuthResponse
@@ -303,7 +321,7 @@ public class AuthService : IAuthService
             AccessToken = accessToken,
             RefreshToken = newRefreshToken.Token,
             ExpiresAt = expiresAt,
-            User = MapToUserDto(token.User)
+            User = MapToUserDto(subjectUser, impersonatorId, impersonatorEmail)
         };
     }
 
@@ -335,9 +353,114 @@ public class AuthService : IAuthService
         return MapToUserDto(user);
     }
 
+    public async Task<AuthResponse> StartImpersonationAsync(
+        Guid adminUserId,
+        Guid targetUserId,
+        string refreshToken,
+        string ipAddress)
+    {
+        var admin = await _context.Users.FirstOrDefaultAsync(u => u.Id == adminUserId);
+        if (admin == null)
+        {
+            throw new UnauthorizedAccessException("Only root admin can impersonate users.");
+        }
+
+        if (!IsRootAdmin(admin))
+        {
+            throw new UnauthorizedAccessException("Only root admin can impersonate users.");
+        }
+
+        var target = await _context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == targetUserId);
+        if (target == null)
+        {
+            throw new KeyNotFoundException("User not found.");
+        }
+
+        var token = await _context.RefreshTokens
+            .Include(t => t.User)
+            .FirstOrDefaultAsync(t => t.Token == refreshToken);
+
+        if (token == null || !token.IsActive)
+        {
+            throw new UnauthorizedAccessException("Invalid token");
+        }
+
+        if (token.UserId != adminUserId)
+        {
+            throw new UnauthorizedAccessException("Session does not match admin account.");
+        }
+
+        token.RevokedAt = DateTime.UtcNow;
+        token.RevokedByIp = ipAddress;
+        token.ReasonRevoked = "Impersonation started";
+
+        var newRefreshToken = GenerateRefreshToken(ipAddress);
+        newRefreshToken.UserId = adminUserId;
+        newRefreshToken.ImpersonatedUserId = targetUserId;
+        token.ReplacedByToken = newRefreshToken.Token;
+
+        _context.RefreshTokens.Add(newRefreshToken);
+        await _context.SaveChangesAsync();
+
+        var accessToken = GenerateAccessToken(target, adminUserId);
+
+        return new AuthResponse
+        {
+            AccessToken = accessToken,
+            RefreshToken = newRefreshToken.Token,
+            ExpiresAt = DateTime.UtcNow.AddMinutes(GetAccessTokenExpirationMinutes()),
+            User = MapToUserDto(target, adminUserId, admin.Email)
+        };
+    }
+
+    public async Task<AuthResponse> StopImpersonationAsync(string refreshToken, string ipAddress)
+    {
+        var token = await _context.RefreshTokens
+            .Include(t => t.User)
+            .FirstOrDefaultAsync(t => t.Token == refreshToken);
+
+        if (token == null || !token.IsActive)
+        {
+            throw new UnauthorizedAccessException("Invalid token");
+        }
+
+        if (token.ImpersonatedUserId == null)
+        {
+            throw new InvalidOperationException("Not in an impersonation session.");
+        }
+
+        var admin = token.User;
+        if (!IsRootAdmin(admin))
+        {
+            throw new UnauthorizedAccessException("Unauthorized.");
+        }
+
+        token.RevokedAt = DateTime.UtcNow;
+        token.RevokedByIp = ipAddress;
+        token.ReasonRevoked = "Impersonation ended";
+
+        var newRefreshToken = GenerateRefreshToken(ipAddress);
+        newRefreshToken.UserId = token.UserId;
+        newRefreshToken.ImpersonatedUserId = null;
+        token.ReplacedByToken = newRefreshToken.Token;
+
+        _context.RefreshTokens.Add(newRefreshToken);
+        await _context.SaveChangesAsync();
+
+        var accessToken = GenerateAccessToken(admin, null);
+
+        return new AuthResponse
+        {
+            AccessToken = accessToken,
+            RefreshToken = newRefreshToken.Token,
+            ExpiresAt = DateTime.UtcNow.AddMinutes(GetAccessTokenExpirationMinutes()),
+            User = MapToUserDto(admin)
+        };
+    }
+
     private async Task<AuthResponse> GenerateAuthResponse(User user, string ipAddress)
     {
-        var accessToken = GenerateAccessToken(user);
+        var accessToken = GenerateAccessToken(user, null);
         var refreshToken = GenerateRefreshToken(ipAddress);
         refreshToken.UserId = user.Id;
 
@@ -359,24 +482,28 @@ public class AuthService : IAuthService
         };
     }
 
-    private string GenerateAccessToken(User user)
+    private string GenerateAccessToken(User user, Guid? impersonatorUserId)
     {
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(
             _configuration["Jwt:Secret"] ?? throw new InvalidOperationException("JWT secret not configured")));
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
-        var claims = new[]
+        var claimList = new List<Claim>
         {
             new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
             new Claim(ClaimTypes.Email, user.Email),
             new Claim(ClaimTypes.Name, $"{user.FirstName} {user.LastName}"),
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
         };
+        if (impersonatorUserId.HasValue)
+        {
+            claimList.Add(new Claim(JwtClaimTypes.Impersonator, impersonatorUserId.Value.ToString()));
+        }
 
         var token = new JwtSecurityToken(
             issuer: _configuration["Jwt:Issuer"],
             audience: _configuration["Jwt:Audience"],
-            claims: claims,
+            claims: claimList,
             expires: DateTime.UtcNow.AddMinutes(GetAccessTokenExpirationMinutes()),
             signingCredentials: credentials
         );
@@ -463,18 +590,23 @@ public class AuthService : IAuthService
         return sent;
     }
 
-    private UserDto MapToUserDto(User user) => new()
+    private UserDto MapToUserDto(User user, Guid? impersonatorUserId = null, string? impersonatorEmail = null) => new()
     {
         Id = user.Id,
         Email = user.Email,
         FirstName = user.FirstName,
         LastName = user.LastName,
         IsAdmin = user.Email == GetRootAdminEmail(),
-        DefaultFollowUpDays = user.DefaultFollowUpDays
+        DefaultFollowUpDays = user.DefaultFollowUpDays,
+        ImpersonatorUserId = impersonatorUserId,
+        ImpersonatorEmail = impersonatorEmail
     };
 
     private string GetRootAdminEmail() =>
         (_configuration["Admin:RootEmail"] ?? string.Empty).Trim().ToLowerInvariant();
+
+    private bool IsRootAdmin(User user) =>
+        user.Email == GetRootAdminEmail();
 }
 
 

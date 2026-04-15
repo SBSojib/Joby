@@ -14,6 +14,8 @@ public interface IAuthService
     Task<AuthResponse> RefreshTokenAsync(string refreshToken, string ipAddress);
     Task RevokeTokenAsync(string refreshToken, string ipAddress);
     Task<UserDto> GetCurrentUserAsync(Guid userId);
+    Task<AuthResponse> StartImpersonationAsync(Guid adminUserId, Guid targetUserId, string refreshToken, string ipAddress);
+    Task<AuthResponse> StopImpersonationAsync(string refreshToken, string ipAddress);
 }
 
 

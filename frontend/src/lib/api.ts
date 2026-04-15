@@ -133,6 +133,11 @@ export const authApi = {
     return response.data;
   },
 
+  stopImpersonation: async (): Promise<AuthResponse> => {
+    const response = await api.post<AuthResponse>('/auth/stop-impersonation');
+    return response.data;
+  },
+
   forgotPassword: async (data: ForgotPasswordRequest): Promise<{ message: string }> => {
     const response = await api.post<{ message: string }>('/auth/forgot-password', data);
     return response.data;
@@ -349,6 +354,11 @@ export const adminApi = {
 
   deleteUser: async (userId: string): Promise<void> => {
     await api.delete(`/admin/users/${userId}`);
+  },
+
+  impersonateUser: async (userId: string): Promise<AuthResponse> => {
+    const response = await api.post<AuthResponse>(`/admin/users/${userId}/impersonate`);
+    return response.data;
   },
 };
 

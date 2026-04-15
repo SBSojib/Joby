@@ -52,6 +52,11 @@ public class ApplicationDbContext : DbContext
                 .WithMany(u => u.RefreshTokens)
                 .HasForeignKey(e => e.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.ImpersonatedUser)
+                .WithMany()
+                .HasForeignKey(e => e.ImpersonatedUserId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         // Profile configuration

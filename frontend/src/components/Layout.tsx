@@ -21,7 +21,7 @@ function sidebarLinkActive(pathname: string, to: string, end?: boolean): boolean
 }
 
 export default function Layout() {
-  const { user, logout } = useAuth();
+  const { user, logout, stopImpersonation } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -32,7 +32,9 @@ export default function Layout() {
     { to: '/applications', icon: FileText, label: 'Applications' },
     { to: '/reminders', icon: Bell, label: 'Reminders' },
     { to: '/profile', icon: User, label: 'Profile' },
-    ...(user?.isAdmin ? [{ to: '/admin', icon: Shield, label: 'Admin' }] : []),
+    ...(user?.isAdmin && !user?.impersonatorUserId
+      ? [{ to: '/admin', icon: Shield, label: 'Admin' }]
+      : []),
   ];
 
   const handleLogout = async () => {
@@ -134,6 +136,23 @@ export default function Layout() {
 
       {/* Main content */}
       <div className="flex-1 flex flex-col overflow-hidden">
+        {user?.impersonatorUserId && (
+          <div className="shrink-0 border-b border-amber-500/40 bg-amber-500/10 px-4 py-2.5 text-sm text-foreground flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+            <p>
+              <span className="font-medium">Impersonating</span>{' '}
+              {user.firstName} {user.lastName} ({user.email}) — admin: {user.impersonatorEmail}
+            </p>
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              className="shrink-0 self-start sm:self-auto"
+              onClick={() => void stopImpersonation()}
+            >
+              Exit impersonation
+            </Button>
+          </div>
+        )}
         {/* Mobile header */}
         <header className="flex h-16 items-center gap-4 border-b bg-card px-6 lg:hidden">
           <button

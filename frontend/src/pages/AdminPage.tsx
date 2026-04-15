@@ -6,12 +6,12 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Trash2 } from 'lucide-react';
+import { Loader2, Trash2, UserRound } from 'lucide-react';
 import { toast } from '@/components/ui/toaster';
 import { formatDate } from '@/lib/utils';
 
 export default function AdminPage() {
-  const { user } = useAuth();
+  const { user, impersonateUser } = useAuth();
   const queryClient = useQueryClient();
 
   const isRootAdmin = !!user?.isAdmin;
@@ -30,6 +30,13 @@ export default function AdminPage() {
     },
     onError: () => {
       toast({ variant: 'destructive', title: 'Delete failed', description: 'Could not delete user.' });
+    },
+  });
+
+  const impersonateMutation = useMutation({
+    mutationFn: (userId: string) => impersonateUser(userId),
+    onError: () => {
+      toast({ variant: 'destructive', title: 'Impersonation failed', description: 'Could not start impersonation.' });
     },
   });
 
@@ -67,13 +74,23 @@ export default function AdminPage() {
                       Joined {formatDate(u.createdAt)}{u.lastLoginAt ? ` • Last login ${formatDate(u.lastLoginAt)}` : ''}
                     </p>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <Badge variant={u.isEmailVerified ? 'secondary' : 'outline'}>
                       {u.isEmailVerified ? 'Verified' : 'Unverified'}
                     </Badge>
-                    {u.isRootAdmin ? (
-                      <Badge>Root</Badge>
-                    ) : (
+                    {u.isRootAdmin ? <Badge>Root</Badge> : null}
+                    {u.id !== user?.id ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={impersonateMutation.isPending || deleteUserMutation.isPending}
+                        onClick={() => impersonateMutation.mutate(u.id)}
+                      >
+                        <UserRound className="h-4 w-4 mr-1" />
+                        Impersonate
+                      </Button>
+                    ) : null}
+                    {u.isRootAdmin ? null : (
                       <Button
                         variant="destructive"
                         size="sm"

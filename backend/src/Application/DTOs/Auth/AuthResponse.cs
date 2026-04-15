@@ -16,6 +16,9 @@ public class UserDto
     public string LastName { get; set; } = string.Empty;
     public bool IsAdmin { get; set; }
     public int DefaultFollowUpDays { get; set; }
+    /// <summary>Set when the session is an admin impersonating another user.</summary>
+    public Guid? ImpersonatorUserId { get; set; }
+    public string? ImpersonatorEmail { get; set; }
 }
 
 

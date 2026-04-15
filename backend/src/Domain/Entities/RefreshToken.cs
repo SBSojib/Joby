@@ -3,6 +3,8 @@ namespace Joby.Domain.Entities;
 public class RefreshToken : BaseEntity
 {
     public Guid UserId { get; set; }
+    /// <summary>When set, the session owner (<see cref="UserId"/>) is acting as this user.</summary>
+    public Guid? ImpersonatedUserId { get; set; }
     public string Token { get; set; } = string.Empty;
     public DateTime ExpiresAt { get; set; }
     public DateTime? RevokedAt { get; set; }
@@ -17,6 +19,7 @@ public class RefreshToken : BaseEntity
     
     // Navigation
     public User User { get; set; } = null!;
+    public User? ImpersonatedUser { get; set; }
 }
 
 

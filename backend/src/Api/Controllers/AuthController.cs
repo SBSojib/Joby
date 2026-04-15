@@ -1,5 +1,6 @@
 using Joby.Application.DTOs.Auth;
 using Joby.Application.Interfaces;
+using Joby.Application.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
@@ -111,7 +112,31 @@ public class AuthController : ControllerBase
     {
         var userId = GetUserId();
         var user = await _authService.GetCurrentUserAsync(userId);
+        var impersonator = User.FindFirst(JwtClaimTypes.Impersonator)?.Value;
+        if (!string.IsNullOrEmpty(impersonator) && Guid.TryParse(impersonator, out var impersonatorId))
+        {
+            var admin = await _authService.GetCurrentUserAsync(impersonatorId);
+            user.ImpersonatorUserId = impersonatorId;
+            user.ImpersonatorEmail = admin.Email;
+        }
+
         return Ok(user);
+    }
+
+    [HttpPost("stop-impersonation")]
+    [Authorize]
+    public async Task<ActionResult<AuthResponse>> StopImpersonation()
+    {
+        var refreshToken = Request.Cookies["refreshToken"];
+        if (string.IsNullOrEmpty(refreshToken))
+        {
+            return BadRequest(new { message = "Refresh token is required" });
+        }
+
+        var ipAddress = GetIpAddress();
+        var response = await _authService.StopImpersonationAsync(refreshToken, ipAddress);
+        SetRefreshTokenCookie(response.RefreshToken);
+        return Ok(response);
     }
 
     private void SetRefreshTokenCookie(string token)
