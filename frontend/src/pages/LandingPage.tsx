@@ -15,6 +15,11 @@ import {
   ArrowRight,
   ChevronDown,
   Star,
+  LayoutGrid,
+  Mail,
+  ListChecks,
+  Archive,
+  History,
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
@@ -64,6 +69,43 @@ const features: FeatureItem[] = [
     title: 'Dashboard Analytics',
     description:
       'Visualize your job search with real-time stats: total applications, response rates, pipeline distribution, and upcoming deadlines.',
+  },
+];
+
+const heroHighlights: {
+  icon: typeof Search;
+  title: string;
+  description: string;
+}[] = [
+  {
+    icon: LayoutGrid,
+    title: 'One home for hundreds of applications',
+    description:
+      'High-volume searches break spreadsheets. See every role, stage, and next action in a single pipeline built for scale.',
+  },
+  {
+    icon: Mail,
+    title: 'Interview & follow-up reminders by email',
+    description:
+      'Stop relying on memory for callbacks and thank-yous. Joby nudges you in your inbox before deadlines and touchpoints slip.',
+  },
+  {
+    icon: ListChecks,
+    title: 'Know if you already applied',
+    description:
+      'Avoid embarrassing double applications and wasted time. Your history is searchable the moment a listing looks familiar.',
+  },
+  {
+    icon: Archive,
+    title: 'Job posts preserved after they vanish',
+    description:
+      'Companies often pull listings after the deadline — then you get an interview. Joby keeps the full posting so requirements and talking points stay in reach.',
+  },
+  {
+    icon: History,
+    title: 'A timeline for every application',
+    description:
+      'Notes, status changes, and events stay attached to each role so you can reconstruct the thread months later.',
   },
 ];
 
@@ -198,11 +240,46 @@ export default function LandingPage() {
             </h1>
 
             <p className="mt-6 text-lg sm:text-xl text-muted-foreground leading-relaxed max-w-2xl mx-auto">
-              Stop juggling spreadsheets and sticky notes. Joby scrapes job listings, tracks
-              every application, sends smart reminders, and helps you land your next role faster.
+              When you are firing off applications everywhere, memory is not a strategy. Joby is the
+              one place to capture listings, move a real pipeline, and keep proof of what each role
+              asked for — even after the original post disappears.
             </p>
 
-            <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
+            <ul className="mt-8 mx-auto max-w-3xl grid gap-2 sm:grid-cols-2 sm:gap-x-3 sm:gap-y-2 text-left list-none p-0">
+              {heroHighlights.map(({ icon: Icon, title, description }) => (
+                <li
+                  key={title}
+                  tabIndex={0}
+                  className={cn(
+                    'group flex items-start gap-2.5 rounded-lg border border-border/60 bg-card/50 px-3 py-2 shadow-sm shadow-black/[0.03]',
+                    'cursor-default transition-[border-color,box-shadow,background-color] duration-300 ease-out',
+                    'hover:border-primary/35 hover:bg-card/85 hover:shadow-md hover:shadow-primary/5',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background'
+                  )}
+                >
+                  <div className="shrink-0 rounded-md bg-primary/10 p-1.5 text-primary transition-colors duration-300 group-hover:bg-primary/15">
+                    <Icon className="h-4 w-4" aria-hidden />
+                  </div>
+                  <div className="min-w-0 flex-1 py-0.5">
+                    <p className="text-sm font-semibold text-foreground leading-tight">{title}</p>
+                    <div
+                      className={cn(
+                        'grid transition-[grid-template-rows] duration-300 ease-out motion-reduce:transition-none',
+                        'grid-rows-[0fr] group-hover:grid-rows-[1fr] group-focus-within:grid-rows-[1fr]'
+                      )}
+                    >
+                      <div className="min-h-0 overflow-hidden">
+                        <p className="pt-1.5 text-xs sm:text-sm text-muted-foreground leading-relaxed">
+                          {description}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+
+            <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
               <Button size="lg" asChild className="text-base px-8 h-12">
                 <Link to="/register">
                   Start Free Trial
