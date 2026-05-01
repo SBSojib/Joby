@@ -1,10 +1,6 @@
-# -----------------------------------------------------------------------------
-# AMI lookup – latest Ubuntu 24.04 LTS (Noble Numbat)
-# -----------------------------------------------------------------------------
-
 data "aws_ami" "ubuntu" {
   most_recent = true
-  owners      = ["099720109477"] # Canonical
+  owners      = ["099720109477"]
 
   filter {
     name   = "name"
@@ -21,10 +17,6 @@ data "aws_ami" "ubuntu" {
     values = ["x86_64"]
   }
 }
-
-# -----------------------------------------------------------------------------
-# EC2 Instance
-# -----------------------------------------------------------------------------
 
 resource "aws_instance" "this" {
   ami                    = data.aws_ami.ubuntu.id
@@ -43,7 +35,7 @@ resource "aws_instance" "this" {
   user_data = templatefile("${path.module}/user_data.sh.tftpl", var.user_data_vars)
 
   metadata_options {
-    http_tokens   = "required" # IMDSv2 only – prevents SSRF-based credential theft
+    http_tokens   = "required"
     http_endpoint = "enabled"
   }
 
@@ -59,10 +51,6 @@ resource "aws_instance" "this" {
     ignore_changes = [ami, user_data]
   }
 }
-
-# -----------------------------------------------------------------------------
-# Elastic IP (optional)
-# -----------------------------------------------------------------------------
 
 resource "aws_eip" "this" {
   count  = var.enable_elastic_ip ? 1 : 0

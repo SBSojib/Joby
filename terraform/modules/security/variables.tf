@@ -30,3 +30,9 @@ variable "app_target_port" {
   type        = number
   default     = 8080
 }
+
+variable "additional_rds_ingress_security_group_ids" {
+  description = "Additional security groups allowed to access PostgreSQL on RDS"
+  type        = list(string)
+  default     = []
+}

@@ -1,7 +1,3 @@
-# -----------------------------------------------------------------------------
-# IAM Role – allows EC2 to assume this role
-# -----------------------------------------------------------------------------
-
 data "aws_iam_policy_document" "ec2_assume_role" {
   statement {
     actions = ["sts:AssumeRole"]
@@ -18,10 +14,6 @@ resource "aws_iam_role" "ec2" {
   assume_role_policy = data.aws_iam_policy_document.ec2_assume_role.json
   tags               = var.tags
 }
-
-# -----------------------------------------------------------------------------
-# S3 access policy – scoped to the specific uploads bucket
-# -----------------------------------------------------------------------------
 
 data "aws_iam_policy_document" "s3_access" {
   statement {
@@ -49,10 +41,6 @@ resource "aws_iam_role_policy" "s3_access" {
   policy = data.aws_iam_policy_document.s3_access.json
 }
 
-# -----------------------------------------------------------------------------
-# CloudWatch Logs policy
-# -----------------------------------------------------------------------------
-
 data "aws_iam_policy_document" "cloudwatch_logs" {
   statement {
     sid = "CloudWatchLogs"
@@ -70,10 +58,6 @@ resource "aws_iam_role_policy" "cloudwatch_logs" {
   role   = aws_iam_role.ec2.id
   policy = data.aws_iam_policy_document.cloudwatch_logs.json
 }
-
-# -----------------------------------------------------------------------------
-# Instance profile – attaches the role to an EC2 instance
-# -----------------------------------------------------------------------------
 
 resource "aws_iam_instance_profile" "ec2" {
   name = "${var.project_name}-${var.environment}-ec2-profile"

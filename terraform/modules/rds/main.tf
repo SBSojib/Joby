@@ -1,8 +1,3 @@
-# -----------------------------------------------------------------------------
-# DB Subnet Group – required even with the default VPC
-# Uses default subnets across multiple AZs for high availability eligibility.
-# -----------------------------------------------------------------------------
-
 resource "aws_db_subnet_group" "this" {
   name       = "${var.project_name}-${var.environment}"
   subnet_ids = var.subnet_ids
@@ -11,11 +6,6 @@ resource "aws_db_subnet_group" "this" {
     Name = "${var.project_name}-${var.environment}-db-subnet-group"
   })
 }
-
-# -----------------------------------------------------------------------------
-# RDS PostgreSQL Instance
-# Free-tier defaults: db.t3.micro, 20 GB gp3, single-AZ, minimal backups.
-# -----------------------------------------------------------------------------
 
 resource "aws_db_instance" "this" {
   identifier = "${var.project_name}-${var.environment}"

@@ -1,0 +1,7 @@
+provision_ec2     = false
+key_pair_name     = "joby-key"
+allowed_ssh_cidrs = ["203.0.113.5/32"]
+ec2_instance_type = "t3.micro"
+ec2_volume_size   = 20
+enable_elastic_ip = false
+app_target_port   = 8080

@@ -1,7 +1,3 @@
-# -----------------------------------------------------------------------------
-# General
-# -----------------------------------------------------------------------------
-
 variable "aws_region" {
   description = "AWS region to deploy into"
   type        = string
@@ -30,13 +26,21 @@ variable "environment" {
   }
 }
 
-# -----------------------------------------------------------------------------
-# EC2
-# -----------------------------------------------------------------------------
-
 variable "key_pair_name" {
   description = "Name of an existing EC2 key pair for SSH access"
   type        = string
+  default     = ""
+
+  validation {
+    condition     = !var.provision_ec2 || length(trimspace(var.key_pair_name)) > 0
+    error_message = "key_pair_name must be set when provision_ec2 is true."
+  }
+}
+
+variable "provision_ec2" {
+  description = "Whether to provision the EC2 host used for Docker Compose deployment"
+  type        = bool
+  default     = false
 }
 
 variable "allowed_ssh_cidrs" {
@@ -72,10 +76,6 @@ variable "enable_elastic_ip" {
   type        = bool
   default     = false
 }
-
-# -----------------------------------------------------------------------------
-# RDS
-# -----------------------------------------------------------------------------
 
 variable "db_name" {
   description = "PostgreSQL database name"
@@ -145,10 +145,6 @@ variable "db_backup_retention_period" {
   }
 }
 
-# -----------------------------------------------------------------------------
-# S3
-# -----------------------------------------------------------------------------
-
 variable "s3_bucket_name" {
   description = "S3 bucket name for file uploads. Leave empty to auto-generate a unique name."
   type        = string
@@ -165,4 +161,52 @@ variable "app_target_port" {
   description = "TCP port on the EC2 security group for inbound app traffic (Docker publish port for the frontend, e.g. 8080)."
   type        = number
   default     = 8080
+}
+
+variable "eks_cluster_version" {
+  description = "Kubernetes version for the EKS cluster"
+  type        = string
+  default     = "1.30"
+}
+
+variable "eks_node_instance_types" {
+  description = "EC2 instance types used by EKS managed node group"
+  type        = list(string)
+  default     = ["t3.medium"]
+}
+
+variable "eks_node_desired_size" {
+  description = "Desired number of worker nodes"
+  type        = number
+  default     = 2
+}
+
+variable "eks_node_min_size" {
+  description = "Minimum number of worker nodes"
+  type        = number
+  default     = 2
+}
+
+variable "eks_node_max_size" {
+  description = "Maximum number of worker nodes"
+  type        = number
+  default     = 4
+}
+
+variable "eks_cluster_public_access_cidrs" {
+  description = "CIDR ranges allowed to access the EKS API server"
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+}
+
+variable "monitoring_alert_email" {
+  description = "Email address for CloudWatch alarm notifications. Leave empty to skip email subscription."
+  type        = string
+  default     = ""
+}
+
+variable "enable_monitoring_alerting" {
+  description = "Enable CloudWatch alarms and SNS alerting resources."
+  type        = bool
+  default     = true
 }

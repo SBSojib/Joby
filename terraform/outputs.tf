@@ -1,25 +1,17 @@
-# -----------------------------------------------------------------------------
-# EC2
-# -----------------------------------------------------------------------------
-
 output "ec2_instance_id" {
   description = "EC2 instance ID"
-  value       = module.ec2.instance_id
+  value       = var.provision_ec2 ? module.ec2[0].instance_id : null
 }
 
 output "ec2_public_ip" {
   description = "Public IP address of the EC2 instance"
-  value       = module.ec2.public_ip
+  value       = var.provision_ec2 ? module.ec2[0].public_ip : null
 }
 
 output "ec2_public_dns" {
   description = "Public DNS name of the EC2 instance"
-  value       = module.ec2.public_dns
+  value       = var.provision_ec2 ? module.ec2[0].public_dns : null
 }
-
-# -----------------------------------------------------------------------------
-# RDS
-# -----------------------------------------------------------------------------
 
 output "rds_endpoint" {
   description = "RDS connection endpoint (host:port)"
@@ -41,10 +33,6 @@ output "rds_db_name" {
   value       = module.rds.db_name
 }
 
-# -----------------------------------------------------------------------------
-# S3
-# -----------------------------------------------------------------------------
-
 output "s3_bucket_name" {
   description = "S3 bucket name for file uploads"
   value       = module.s3.bucket_name
@@ -55,31 +43,54 @@ output "s3_bucket_arn" {
   value       = module.s3.bucket_arn
 }
 
-# -----------------------------------------------------------------------------
-# IAM
-# -----------------------------------------------------------------------------
-
 output "ec2_iam_role_arn" {
   description = "ARN of the IAM role attached to the EC2 instance"
-  value       = module.iam.role_arn
+  value       = var.provision_ec2 ? module.iam[0].role_arn : null
 }
-
-# -----------------------------------------------------------------------------
-# CloudWatch
-# -----------------------------------------------------------------------------
 
 output "cloudwatch_log_group" {
   description = "CloudWatch log group name"
-  value       = aws_cloudwatch_log_group.app.name
+  value       = module.logging.log_group_name
 }
-
-# -----------------------------------------------------------------------------
-# Connectivity helpers
-# -----------------------------------------------------------------------------
 
 output "ssh_command" {
   description = "SSH command to connect to the EC2 instance"
-  value       = "ssh -i ~/.ssh/${var.key_pair_name}.pem ubuntu@${module.ec2.public_ip}"
+  value       = var.provision_ec2 ? "ssh -i ~/.ssh/${var.key_pair_name}.pem ubuntu@${module.ec2[0].public_ip}" : null
+}
+
+output "eks_cluster_name" {
+  description = "EKS cluster name"
+  value       = module.eks.cluster_name
+}
+
+output "eks_cluster_endpoint" {
+  description = "EKS API server endpoint"
+  value       = module.eks.cluster_endpoint
+}
+
+output "eks_cluster_oidc_issuer_url" {
+  description = "EKS OIDC issuer URL"
+  value       = module.eks.cluster_oidc_issuer_url
+}
+
+output "ecr_backend_repository_url" {
+  description = "ECR repository URL for backend image"
+  value       = module.ecr.backend_repository_url
+}
+
+output "ecr_frontend_repository_url" {
+  description = "ECR repository URL for frontend image"
+  value       = module.ecr.frontend_repository_url
+}
+
+output "monitoring_dashboard_name" {
+  description = "CloudWatch dashboard name for infrastructure and Joby signals"
+  value       = module.monitoring.dashboard_name
+}
+
+output "monitoring_alerts_topic_arn" {
+  description = "SNS topic ARN for monitoring alerts"
+  value       = module.monitoring.alerts_topic_arn
 }
 
 output "connection_string" {
@@ -92,32 +103,21 @@ output "next_steps" {
   description = "What to do after terraform apply"
   value       = <<-EOT
 
-    ============================================================
-    Joby Infrastructure Deployed Successfully!
-    ============================================================
+    1. Configure kubeconfig:
+       aws eks update-kubeconfig --region ${var.aws_region} --name ${module.eks.cluster_name}
 
-    1. SSH into your EC2 instance:
-       ssh -i ~/.ssh/${var.key_pair_name}.pem ubuntu@${module.ec2.public_ip}
+    2. Build and push images:
+       docker build -t ${module.ecr.backend_repository_url}:latest ./backend
+       docker build -t ${module.ecr.frontend_repository_url}:latest ./frontend
+       aws ecr get-login-password --region ${var.aws_region} | docker login --username AWS --password-stdin ${module.ecr.backend_repository_url}
+       docker push ${module.ecr.backend_repository_url}:latest
+       docker push ${module.ecr.frontend_repository_url}:latest
 
-    2. Verify Docker is running:
-       docker --version && docker compose version
-
-    3. Test RDS connectivity from EC2:
-       sudo apt-get install -y postgresql-client
-       psql -h ${module.rds.address} -p ${module.rds.port} -U ${var.db_username} -d ${var.db_name}
-
-    4. Test S3 access from EC2 (uses the instance role, no keys needed):
-       aws s3 ls s3://${module.s3.bucket_name}
-       echo "hello" > /tmp/test.txt
-       aws s3 cp /tmp/test.txt s3://${module.s3.bucket_name}/test.txt
-       aws s3 rm s3://${module.s3.bucket_name}/test.txt
-
-    5. Edit /opt/${var.project_name}/.env with your real database password
-
-    6. Copy your docker-compose.yml and app configs to /opt/${var.project_name}/
-
-    7. Start the app:
-       cd /opt/${var.project_name} && docker compose up -d
+    3. Update k8s manifests:
+       - set backend image to ${module.ecr.backend_repository_url}:latest
+       - set frontend image to ${module.ecr.frontend_repository_url}:latest
+       - set DB host in k8s secret to ${module.rds.address}
+       - set S3 bucket to ${module.s3.bucket_name}
 
   EOT
 }

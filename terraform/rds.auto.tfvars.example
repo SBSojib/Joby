@@ -1,0 +1,8 @@
+db_name                    = "joby"
+db_username                = "joby_admin"
+db_password                = "CHANGE_ME_use_a_strong_password_here"
+db_instance_class          = "db.t3.micro"
+db_allocated_storage       = 20
+db_skip_final_snapshot     = true
+db_deletion_protection     = false
+db_backup_retention_period = 1

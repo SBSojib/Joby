@@ -1,0 +1,2 @@
+s3_bucket_name        = ""
+s3_versioning_enabled = false

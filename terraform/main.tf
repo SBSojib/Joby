@@ -1,39 +1,10 @@
-# -----------------------------------------------------------------------------
-# Data sources – default VPC and subnets
-# Using the default VPC keeps the setup simple and free-tier friendly.
-# For production, consider creating a custom VPC with private subnets.
-# -----------------------------------------------------------------------------
-
-data "aws_vpc" "default" {
-  default = true
-}
-
-data "aws_subnets" "default" {
-  filter {
-    name   = "vpc-id"
-    values = [data.aws_vpc.default.id]
-  }
-
-  filter {
-    name   = "default-for-az"
-    values = ["true"]
-  }
-}
-
-# -----------------------------------------------------------------------------
-# Random suffix for globally unique S3 bucket name
-# -----------------------------------------------------------------------------
-
 resource "random_id" "suffix" {
   byte_length = 4
 }
 
-# -----------------------------------------------------------------------------
-# Locals
-# -----------------------------------------------------------------------------
-
 locals {
   s3_bucket_name = var.s3_bucket_name != "" ? var.s3_bucket_name : "${var.project_name}-${var.environment}-uploads-${random_id.suffix.hex}"
+  enable_ec2     = var.provision_ec2
 
   common_tags = {
     Project     = var.project_name
@@ -42,29 +13,52 @@ locals {
   }
 }
 
-# -----------------------------------------------------------------------------
-# CloudWatch Log Group
-# -----------------------------------------------------------------------------
-
-resource "aws_cloudwatch_log_group" "app" {
-  name              = "/${var.project_name}/${var.environment}"
-  retention_in_days = 7
-  tags              = local.common_tags
+module "network" {
+  source = "./modules/network"
 }
 
-# -----------------------------------------------------------------------------
-# Modules
-# -----------------------------------------------------------------------------
+module "logging" {
+  source = "./modules/logging"
+
+  project_name = var.project_name
+  environment  = var.environment
+  tags         = local.common_tags
+}
+
+module "eks" {
+  source = "./modules/eks"
+
+  project_name                 = var.project_name
+  environment                  = var.environment
+  cluster_version              = var.eks_cluster_version
+  subnet_ids                   = module.network.subnet_ids
+  vpc_id                       = module.network.vpc_id
+  node_instance_types          = var.eks_node_instance_types
+  node_desired_size            = var.eks_node_desired_size
+  node_min_size                = var.eks_node_min_size
+  node_max_size                = var.eks_node_max_size
+  cluster_public_access_cidrs  = var.eks_cluster_public_access_cidrs
+  tags                         = local.common_tags
+}
 
 module "security" {
   source = "./modules/security"
 
   project_name      = var.project_name
   environment       = var.environment
-  vpc_id            = data.aws_vpc.default.id
+  vpc_id            = module.network.vpc_id
   allowed_ssh_cidrs = var.allowed_ssh_cidrs
   app_target_port   = var.app_target_port
   tags              = local.common_tags
+}
+
+resource "aws_vpc_security_group_ingress_rule" "rds_from_eks_nodes" {
+  security_group_id            = module.security.rds_security_group_id
+  referenced_security_group_id = module.eks.node_security_group_id
+  ip_protocol                  = "tcp"
+  from_port                    = 5432
+  to_port                      = 5432
+  description                  = "PostgreSQL from EKS worker nodes"
 }
 
 module "s3" {
@@ -75,14 +69,23 @@ module "s3" {
   tags               = local.common_tags
 }
 
+module "ecr" {
+  source = "./modules/ecr"
+
+  project_name = var.project_name
+  environment  = var.environment
+  tags         = local.common_tags
+}
+
 module "iam" {
+  count  = local.enable_ec2 ? 1 : 0
   source = "./modules/iam"
 
-  project_name            = var.project_name
-  environment             = var.environment
-  s3_bucket_arn           = module.s3.bucket_arn
-  cloudwatch_log_group_arn = aws_cloudwatch_log_group.app.arn
-  tags                    = local.common_tags
+  project_name             = var.project_name
+  environment              = var.environment
+  s3_bucket_arn            = module.s3.bucket_arn
+  cloudwatch_log_group_arn = module.logging.log_group_arn
+  tags                     = local.common_tags
 }
 
 module "rds" {
@@ -90,7 +93,7 @@ module "rds" {
 
   project_name            = var.project_name
   environment             = var.environment
-  subnet_ids              = data.aws_subnets.default.ids
+  subnet_ids              = module.network.subnet_ids
   security_group_id       = module.security.rds_security_group_id
   db_name                 = var.db_name
   db_username             = var.db_username
@@ -103,7 +106,22 @@ module "rds" {
   tags                    = local.common_tags
 }
 
+module "monitoring" {
+  source = "./modules/monitoring"
+
+  project_name                 = var.project_name
+  environment                  = var.environment
+  aws_region                   = var.aws_region
+  rds_instance_identifier      = module.rds.identifier
+  eks_cluster_name             = module.eks.cluster_name
+  application_log_group_name   = module.logging.log_group_name
+  alert_email                  = var.monitoring_alert_email
+  enable_alerting              = var.enable_monitoring_alerting
+  tags                         = local.common_tags
+}
+
 module "ec2" {
+  count  = local.enable_ec2 ? 1 : 0
   source = "./modules/ec2"
 
   project_name         = var.project_name
@@ -112,7 +130,7 @@ module "ec2" {
   volume_size          = var.ec2_volume_size
   key_pair_name        = var.key_pair_name
   security_group_id    = module.security.ec2_security_group_id
-  iam_instance_profile = module.iam.instance_profile_name
+  iam_instance_profile = module.iam[0].instance_profile_name
   enable_elastic_ip    = var.enable_elastic_ip
   tags                 = local.common_tags
 

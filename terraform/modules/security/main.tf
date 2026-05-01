@@ -3,7 +3,6 @@ resource "aws_security_group" "ec2" {
   description = "Controls traffic to the ${var.project_name} EC2 instance"
   vpc_id      = var.vpc_id
 
-  # SSH – only from explicitly allowed CIDRs
   dynamic "ingress" {
     for_each = length(var.allowed_ssh_cidrs) > 0 ? [1] : []
     content {
@@ -51,6 +50,17 @@ resource "aws_security_group" "rds" {
     to_port         = 5432
     protocol        = "tcp"
     security_groups = [aws_security_group.ec2.id]
+  }
+
+  dynamic "ingress" {
+    for_each = var.additional_rds_ingress_security_group_ids
+    content {
+      description     = "PostgreSQL from additional security group"
+      from_port       = 5432
+      to_port         = 5432
+      protocol        = "tcp"
+      security_groups = [ingress.value]
+    }
   }
 
   tags = merge(var.tags, {
