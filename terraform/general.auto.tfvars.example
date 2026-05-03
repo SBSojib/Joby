@@ -1,3 +1,23 @@
 aws_region   = "us-east-1"
 project_name = "joby"
 environment  = "dev"
+
+domain_name    = "example.com"
+app_subdomain  = "app"
+waf_rate_limit = 2000
+
+vpc_cidr             = "10.20.0.0/16"
+az_count             = 3
+public_subnet_cidrs  = ["10.20.0.0/24", "10.20.1.0/24", "10.20.2.0/24"]
+private_subnet_cidrs = ["10.20.10.0/24", "10.20.11.0/24", "10.20.12.0/24"]
+enable_nat_gateway   = true
+single_nat_gateway   = false
+enable_vpc_endpoints = true
+
+k8s_namespace                = "joby"
+backend_service_account_name = "joby-backend"
+
+manage_application_secret_value = false
+jwt_secret                      = ""
+enable_kubernetes_addons        = false
+enable_security_baseline        = true

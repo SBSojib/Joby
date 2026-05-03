@@ -3,6 +3,12 @@ kind: Kustomization
 namespace: joby
 resources:
   - namespace.yaml
+  - serviceaccount.yaml
   - configmap.yaml
+  - clustersecretstore.yaml
+  - externalsecret.yaml
   - backend.yaml
   - frontend.yaml
+  - ingress.yaml
+  - hpa.yaml
+  - pdb.yaml

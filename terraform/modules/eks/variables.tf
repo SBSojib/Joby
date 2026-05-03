@@ -44,9 +44,29 @@ variable "cluster_public_access_cidrs" {
   default = ["0.0.0.0/0"]
 }
 
+variable "cluster_endpoint_public_access" {
+  type    = bool
+  default = true
+}
+
+variable "cluster_endpoint_private_access" {
+  type    = bool
+  default = true
+}
+
 variable "enabled_cluster_log_types" {
   type    = list(string)
   default = ["api", "audit", "authenticator", "controllerManager", "scheduler"]
+}
+
+variable "cluster_addons" {
+  type = set(string)
+  default = [
+    "coredns",
+    "kube-proxy",
+    "vpc-cni",
+    "aws-ebs-csi-driver"
+  ]
 }
 
 variable "tags" {

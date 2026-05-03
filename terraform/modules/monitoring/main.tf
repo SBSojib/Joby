@@ -1,9 +1,9 @@
 locals {
-  name_prefix        = "${var.project_name}-${var.environment}"
-  alarm_actions      = var.enable_alerting ? [aws_sns_topic.alerts[0].arn] : []
-  ok_actions         = var.enable_alerting ? [aws_sns_topic.alerts[0].arn] : []
-  custom_namespace   = "${var.project_name}/${var.environment}"
-  dashboard_name     = "${local.name_prefix}-operations"
+  name_prefix         = "${var.project_name}-${var.environment}"
+  alarm_actions       = var.enable_alerting ? [aws_sns_topic.alerts[0].arn] : []
+  ok_actions          = var.enable_alerting ? [aws_sns_topic.alerts[0].arn] : []
+  custom_namespace    = "${var.project_name}/${var.environment}"
+  dashboard_name      = "${local.name_prefix}-operations"
   create_subscription = var.enable_alerting && length(trimspace(var.alert_email)) > 0
 }
 

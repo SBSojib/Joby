@@ -1,0 +1,114 @@
+name: Terraform
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Infrastructure environment name
+        required: true
+        default: dev
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+      apply:
+        description: Apply the approved Terraform plan
+        required: true
+        default: false
+        type: boolean
+      enable_kubernetes_addons:
+        description: Install Helm/Kubernetes add-ons. Enable after the EKS cluster exists.
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: terraform-${{ inputs.environment }}
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+  TF_IN_AUTOMATION: true
+  TF_INPUT: false
+  TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
+  TF_LOCK_TABLE: ${{ secrets.TF_LOCK_TABLE }}
+  TF_VAR_aws_region: ${{ vars.AWS_REGION || 'us-east-1' }}
+  TF_VAR_project_name: ${{ vars.PROJECT_NAME || 'joby' }}
+  TF_VAR_environment: ${{ inputs.environment }}
+  TF_VAR_domain_name: ${{ vars.DOMAIN_NAME }}
+  TF_VAR_app_subdomain: ${{ vars.APP_SUBDOMAIN || 'app' }}
+  TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
+  TF_VAR_jwt_secret: ${{ secrets.JWT_SECRET || '' }}
+  TF_VAR_manage_application_secret_value: ${{ secrets.JWT_SECRET != '' }}
+  TF_VAR_enable_kubernetes_addons: ${{ inputs.enable_kubernetes_addons }}
+  TF_VAR_monitoring_alert_email: ${{ vars.MONITORING_ALERT_EMAIL || '' }}
+
+jobs:
+  terraform:
+    name: Plan and Apply
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+
+    defaults:
+      run:
+        working-directory: terraform
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.6
+
+      - name: Terraform format
+        run: terraform fmt -check -recursive
+
+      - name: Terraform init
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ -z "${TF_VAR_domain_name:-}" ]; then
+            echo "DOMAIN_NAME must be set as a GitHub repository variable." >&2
+            exit 1
+          fi
+
+          if [ -z "$TF_STATE_BUCKET" ]; then
+            echo "TF_STATE_BUCKET must be set as a GitHub Actions secret." >&2
+            exit 1
+          fi
+
+          args=(
+            -b "${TF_STATE_BUCKET}"
+            -r "${AWS_REGION}"
+            -k "joby/${TF_VAR_environment}/terraform.tfstate"
+          )
+
+          if [ -n "${TF_LOCK_TABLE:-}" ]; then
+            args+=(-d "${TF_LOCK_TABLE}")
+          fi
+
+          bash ./init-remote-s3.sh "${args[@]}"
+
+      - name: Terraform validate
+        run: terraform validate
+
+      - name: Terraform plan
+        run: terraform plan -out=tfplan
+
+      - name: Terraform apply
+        if: ${{ inputs.apply }}
+        run: terraform apply -auto-approve tfplan

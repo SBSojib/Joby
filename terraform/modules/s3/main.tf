@@ -1,6 +1,6 @@
 resource "aws_s3_bucket" "uploads" {
   bucket        = var.bucket_name
-  force_destroy = true
+  force_destroy = var.force_destroy
   tags          = var.tags
 }
 
@@ -30,4 +30,64 @@ resource "aws_s3_bucket_public_access_block" "uploads" {
   block_public_policy     = true
   ignore_public_acls      = true
   restrict_public_buckets = true
+}
+
+data "aws_iam_policy_document" "uploads" {
+  statement {
+    sid     = "DenyInsecureTransport"
+    effect  = "Deny"
+    actions = ["s3:*"]
+
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+
+    resources = [
+      aws_s3_bucket.uploads.arn,
+      "${aws_s3_bucket.uploads.arn}/*",
+    ]
+
+    condition {
+      test     = "Bool"
+      variable = "aws:SecureTransport"
+      values   = ["false"]
+    }
+  }
+}
+
+resource "aws_s3_bucket_policy" "uploads" {
+  bucket = aws_s3_bucket.uploads.id
+  policy = data.aws_iam_policy_document.uploads.json
+
+  depends_on = [aws_s3_bucket_public_access_block.uploads]
+}
+
+resource "aws_s3_bucket_ownership_controls" "uploads" {
+  bucket = aws_s3_bucket.uploads.id
+
+  rule {
+    object_ownership = "BucketOwnerEnforced"
+  }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "uploads" {
+  bucket = aws_s3_bucket.uploads.id
+
+  rule {
+    id     = "expire-noncurrent-uploads"
+    status = var.versioning_enabled ? "Enabled" : "Disabled"
+
+    filter {
+      prefix = ""
+    }
+
+    noncurrent_version_expiration {
+      noncurrent_days = var.noncurrent_version_expiration_days
+    }
+
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 7
+    }
+  }
 }

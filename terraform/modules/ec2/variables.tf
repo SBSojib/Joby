@@ -13,6 +13,11 @@ variable "instance_type" {
   type        = string
 }
 
+variable "subnet_id" {
+  description = "Subnet ID for the EC2 instance"
+  type        = string
+}
+
 variable "volume_size" {
   description = "Root EBS volume size in GB"
   type        = number

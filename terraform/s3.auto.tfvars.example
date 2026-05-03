@@ -1,2 +1,3 @@
 s3_bucket_name        = ""
-s3_versioning_enabled = false
+s3_versioning_enabled = true
+s3_force_destroy      = false

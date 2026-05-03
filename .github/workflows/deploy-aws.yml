@@ -1,0 +1,225 @@
+name: Deploy to AWS
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Deployment environment name
+        required: false
+        default: dev
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+      image_tag:
+        description: Deprecated. Deployments always use the commit SHA as the immutable image tag.
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-aws-${{ inputs.environment || vars.ENVIRONMENT || 'dev' }}
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+  PROJECT_NAME: ${{ vars.PROJECT_NAME || 'joby' }}
+  DEPLOY_ENVIRONMENT: ${{ inputs.environment || vars.ENVIRONMENT || 'dev' }}
+  VITE_API_URL: ${{ vars.VITE_API_URL || '/api' }}
+  CORS_ALLOWED_ORIGIN: ${{ vars.CORS_ALLOWED_ORIGIN }}
+  S3_BUCKET_NAME: ${{ vars.S3_BUCKET_NAME }}
+  APP_HOSTNAME: ${{ vars.APP_HOSTNAME }}
+  ACM_CERTIFICATE_ARN: ${{ vars.ACM_CERTIFICATE_ARN }}
+  WAF_WEB_ACL_ARN: ${{ vars.WAF_WEB_ACL_ARN }}
+  BACKEND_IRSA_ROLE_ARN: ${{ vars.BACKEND_IRSA_ROLE_ARN }}
+  APPLICATION_SECRET_NAME: ${{ vars.APPLICATION_SECRET_NAME }}
+  EKS_CLUSTER_NAME: ${{ vars.EKS_CLUSTER_NAME }}
+  ECR_BACKEND_REPOSITORY: ${{ vars.ECR_BACKEND_REPOSITORY }}
+  ECR_FRONTEND_REPOSITORY: ${{ vars.ECR_FRONTEND_REPOSITORY }}
+
+jobs:
+  deploy:
+    name: Build, Push, and Deploy
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    environment: ${{ inputs.environment || vars.ENVIRONMENT || 'dev' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Resolve deployment settings
+        id: settings
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          account_id="$(aws sts get-caller-identity --query Account --output text)"
+          source_sha="${{ github.event.workflow_run.head_sha || github.sha }}"
+          image_tag="${source_sha}"
+
+          backend_repo="${ECR_BACKEND_REPOSITORY:-${PROJECT_NAME}-${DEPLOY_ENVIRONMENT}-joby-backend}"
+          frontend_repo="${ECR_FRONTEND_REPOSITORY:-${PROJECT_NAME}-${DEPLOY_ENVIRONMENT}-joby-frontend}"
+          registry="${account_id}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+          cluster_name="${EKS_CLUSTER_NAME:-${PROJECT_NAME}-${DEPLOY_ENVIRONMENT}-eks}"
+
+          {
+            echo "backend_image=${registry}/${backend_repo}:${image_tag}"
+            echo "frontend_image=${registry}/${frontend_repo}:${image_tag}"
+            echo "backend_repo=${backend_repo}"
+            echo "frontend_repo=${frontend_repo}"
+            echo "image_tag=${image_tag}"
+            echo "cluster_name=${cluster_name}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Check existing immutable images
+        id: existing_images
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          backend_exists=false
+          frontend_exists=false
+
+          if aws ecr describe-images --repository-name "${{ steps.settings.outputs.backend_repo }}" --image-ids imageTag="${{ steps.settings.outputs.image_tag }}" >/dev/null 2>&1; then
+            backend_exists=true
+          fi
+
+          if aws ecr describe-images --repository-name "${{ steps.settings.outputs.frontend_repo }}" --image-ids imageTag="${{ steps.settings.outputs.image_tag }}" >/dev/null 2>&1; then
+            frontend_exists=true
+          fi
+
+          {
+            echo "backend_exists=${backend_exists}"
+            echo "frontend_exists=${frontend_exists}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build and push backend image
+        if: ${{ steps.existing_images.outputs.backend_exists != 'true' }}
+        uses: docker/build-push-action@v6
+        with:
+          context: backend
+          file: backend/Dockerfile
+          push: true
+          tags: ${{ steps.settings.outputs.backend_image }}
+
+      - name: Build and push frontend image
+        if: ${{ steps.existing_images.outputs.frontend_exists != 'true' }}
+        uses: docker/build-push-action@v6
+        with:
+          context: frontend
+          file: frontend/Dockerfile
+          push: true
+          tags: ${{ steps.settings.outputs.frontend_image }}
+          build-args: |
+            VITE_API_URL=${{ env.VITE_API_URL }}
+
+      - name: Gate on ECR scan findings
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          check_scan() {
+            local repository="$1"
+            local image_tag="$2"
+
+            aws ecr wait image-scan-complete \
+              --repository-name "$repository" \
+              --image-id imageTag="$image_tag" || true
+
+            findings="$(aws ecr describe-image-scan-findings \
+              --repository-name "$repository" \
+              --image-id imageTag="$image_tag" \
+              --query 'imageScanFindings.findingSeverityCounts' \
+              --output json || echo '{}')"
+
+            critical="$(echo "$findings" | jq -r '.CRITICAL // 0')"
+            high="$(echo "$findings" | jq -r '.HIGH // 0')"
+
+            if [ "$critical" -gt 0 ] || [ "$high" -gt 0 ]; then
+              echo "ECR scan failed for $repository:$image_tag with CRITICAL=$critical HIGH=$high" >&2
+              exit 1
+            fi
+          }
+
+          check_scan "${{ steps.settings.outputs.backend_repo }}" "${{ steps.settings.outputs.image_tag }}"
+          check_scan "${{ steps.settings.outputs.frontend_repo }}" "${{ steps.settings.outputs.image_tag }}"
+
+      - name: Configure kubeconfig
+        shell: bash
+        run: |
+          aws eks update-kubeconfig \
+            --region "$AWS_REGION" \
+            --name "${{ steps.settings.outputs.cluster_name }}"
+
+      - name: Render and apply Kubernetes manifests
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          for required in S3_BUCKET_NAME APP_HOSTNAME ACM_CERTIFICATE_ARN WAF_WEB_ACL_ARN BACKEND_IRSA_ROLE_ARN APPLICATION_SECRET_NAME; do
+            if [ -z "${!required}" ]; then
+              echo "$required must be set as a GitHub repository variable." >&2
+              exit 1
+            fi
+          done
+
+          workdir="$(mktemp -d)"
+          cp -R k8s/eks/. "$workdir/"
+          cors_origin="${CORS_ALLOWED_ORIGIN:-https://${APP_HOSTNAME}}"
+
+          python3 - <<'PY' "$workdir" "${{ steps.settings.outputs.backend_image }}" "${{ steps.settings.outputs.frontend_image }}" "$S3_BUCKET_NAME" "$AWS_REGION" "$cors_origin" "$APP_HOSTNAME" "$ACM_CERTIFICATE_ARN" "$WAF_WEB_ACL_ARN" "$BACKEND_IRSA_ROLE_ARN" "$APPLICATION_SECRET_NAME"
+          import sys
+          from pathlib import Path
+
+          root = Path(sys.argv[1])
+          replacements = {
+              "REPLACE_WITH_BACKEND_IMAGE": sys.argv[2],
+              "REPLACE_WITH_FRONTEND_IMAGE": sys.argv[3],
+              "REPLACE_WITH_S3_BUCKET_NAME": sys.argv[4],
+              "REPLACE_WITH_AWS_REGION": sys.argv[5],
+              'AWS_REGION: "us-east-1"': f'AWS_REGION: "{sys.argv[5]}"',
+              'Cors__AllowedOrigins__0: "http://localhost"': f'Cors__AllowedOrigins__0: "{sys.argv[6]}"',
+              "REPLACE_WITH_APP_HOSTNAME": sys.argv[7],
+              "REPLACE_WITH_ACM_CERTIFICATE_ARN": sys.argv[8],
+              "REPLACE_WITH_WAF_WEB_ACL_ARN": sys.argv[9],
+              "REPLACE_WITH_BACKEND_IRSA_ROLE_ARN": sys.argv[10],
+              "REPLACE_WITH_APPLICATION_SECRET_NAME": sys.argv[11],
+          }
+
+          for manifest in ("backend.yaml", "frontend.yaml", "configmap.yaml", "ingress.yaml", "serviceaccount.yaml", "clustersecretstore.yaml", "externalsecret.yaml"):
+              path = root / manifest
+              contents = path.read_text(encoding="utf-8")
+              for old, new in replacements.items():
+                  contents = contents.replace(old, new)
+              path.write_text(contents, encoding="utf-8")
+          PY
+
+          kubectl apply -k "$workdir"
+          kubectl rollout status deployment/backend --namespace joby --timeout=5m
+          kubectl rollout status deployment/frontend --namespace joby --timeout=5m

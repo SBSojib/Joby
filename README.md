@@ -39,6 +39,8 @@ A full-stack MVP web application for tracking job applications, discovering job 
 - Docker
 - Kubernetes
 - Nginx
+- GitHub Actions CI/CD
+- AWS EKS, ECR, RDS, S3, and CloudWatch via Terraform
 
 ## Project Structure
 
@@ -58,6 +60,7 @@ A full-stack MVP web application for tracking job applications, discovering job 
 │       ├── pages/            # Page components
 │       └── types/            # TypeScript types
 ├── k8s/                      # Kubernetes manifests
+├── .github/                  # GitHub Actions workflows and CI/CD docs
 ├── scripts/                  # Dev helper scripts
 └── docker-compose.yml
 ```
@@ -192,18 +195,11 @@ kubectl logs -f deployment/frontend -n joby
 
 ### Configuration
 
-1. Update `k8s/secret.yaml` with production secrets
+1. Store production secrets in AWS Secrets Manager for EKS deployments
 2. Update `k8s/configmap.yaml` with your domain
 3. Update `k8s/ingress.yaml` with your hostname and TLS settings
 
-For production with managed PostgreSQL:
-```bash
-# Update the connection string in secrets
-kubectl create secret generic joby-secrets \
-  --from-literal=ConnectionStrings__DefaultConnection="Host=your-db.example.com;..." \
-  --from-literal=Jwt__Secret="your-production-secret" \
-  -n joby
-```
+For production on EKS, use `terraform/` and `k8s/eks/`. Runtime secrets are synced from AWS Secrets Manager by External Secrets Operator instead of being created manually with `kubectl`.
 
 ## Development
 

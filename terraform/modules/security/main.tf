@@ -41,7 +41,7 @@ resource "aws_security_group" "ec2" {
 
 resource "aws_security_group" "rds" {
   name_prefix = "${var.project_name}-${var.environment}-rds-"
-  description = "Allows PostgreSQL access only from the ${var.project_name} EC2 security group"
+  description = "Allows PostgreSQL access only from approved application security groups"
   vpc_id      = var.vpc_id
 
   ingress {

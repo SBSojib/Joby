@@ -46,22 +46,52 @@ variable "allocated_storage" {
   default     = 20
 }
 
+variable "max_allocated_storage" {
+  description = "Maximum RDS storage in GB for autoscaling"
+  type        = number
+  default     = 100
+}
+
+variable "multi_az" {
+  description = "Enable synchronous standby in another Availability Zone"
+  type        = bool
+  default     = true
+}
+
+variable "performance_insights_enabled" {
+  description = "Enable Performance Insights"
+  type        = bool
+  default     = true
+}
+
 variable "backup_retention_period" {
   description = "Number of days to retain automated backups"
   type        = number
-  default     = 1
+  default     = 7
 }
 
 variable "skip_final_snapshot" {
   description = "Skip final snapshot on deletion"
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "deletion_protection" {
   description = "Enable deletion protection"
   type        = bool
-  default     = false
+  default     = true
+}
+
+variable "enabled_cloudwatch_logs_exports" {
+  description = "RDS PostgreSQL log exports"
+  type        = list(string)
+  default     = ["postgresql", "upgrade"]
+}
+
+variable "monitoring_interval" {
+  description = "Enhanced monitoring interval in seconds"
+  type        = number
+  default     = 60
 }
 
 variable "tags" {
