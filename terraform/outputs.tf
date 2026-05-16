@@ -1,18 +1,3 @@
-output "ec2_instance_id" {
-  description = "EC2 instance ID"
-  value       = var.provision_ec2 ? module.ec2[0].instance_id : null
-}
-
-output "ec2_public_ip" {
-  description = "Public IP address of the EC2 instance"
-  value       = var.provision_ec2 ? module.ec2[0].public_ip : null
-}
-
-output "ec2_public_dns" {
-  description = "Public DNS name of the EC2 instance"
-  value       = var.provision_ec2 ? module.ec2[0].public_dns : null
-}
-
 output "rds_endpoint" {
   description = "RDS connection endpoint (host:port)"
   value       = module.rds.endpoint
@@ -73,14 +58,14 @@ output "external_dns_role_arn" {
   value       = var.enable_kubernetes_addons ? module.eks_addons[0].external_dns_role_arn : null
 }
 
-output "ec2_iam_role_arn" {
-  description = "ARN of the IAM role attached to the EC2 instance"
-  value       = var.provision_ec2 ? module.iam[0].role_arn : null
+output "adot_collector_role_arn" {
+  description = "IRSA role ARN for ADOT Collector"
+  value       = var.enable_kubernetes_addons ? module.eks_addons[0].adot_collector_role_arn : null
 }
 
 output "cloudwatch_log_group" {
   description = "CloudWatch log group name"
-  value       = module.logging.log_group_name
+  value       = aws_cloudwatch_log_group.app.name
 }
 
 output "route53_hosted_zone_id" {
@@ -104,7 +89,7 @@ output "acm_certificate_arn" {
 }
 
 output "waf_web_acl_arn" {
-  description = "WAF Web ACL ARN for ALB ingress"
+  description = "Regional WAF Web ACL ARN for ALB"
   value       = module.edge.waf_web_acl_arn
 }
 
@@ -119,13 +104,8 @@ output "private_subnet_ids" {
 }
 
 output "public_subnet_ids" {
-  description = "Public subnet IDs for load balancers and optional EC2"
+  description = "Public subnet IDs for load balancers"
   value       = module.network.public_subnet_ids
-}
-
-output "ssh_command" {
-  description = "SSH command to connect to the EC2 instance"
-  value       = var.provision_ec2 ? "ssh -i ~/.ssh/${var.key_pair_name}.pem ubuntu@${module.ec2[0].public_ip}" : null
 }
 
 output "eks_cluster_name" {
@@ -159,7 +139,7 @@ output "ecr_frontend_repository_url" {
 }
 
 output "monitoring_dashboard_name" {
-  description = "CloudWatch dashboard name for infrastructure and Joby signals"
+  description = "CloudWatch dashboard name"
   value       = module.monitoring.dashboard_name
 }
 
@@ -168,19 +148,34 @@ output "monitoring_alerts_topic_arn" {
   value       = module.monitoring.alerts_topic_arn
 }
 
+output "monthly_budget_name" {
+  description = "Monthly AWS budget name"
+  value       = module.cost_controls.monthly_budget_name
+}
+
+output "cost_anomaly_monitor_arn" {
+  description = "Cost Anomaly Detection monitor ARN"
+  value       = module.cost_controls.cost_anomaly_monitor_arn
+}
+
+output "cost_anomaly_subscription_arn" {
+  description = "Cost Anomaly Detection subscription ARN"
+  value       = module.cost_controls.cost_anomaly_subscription_arn
+}
+
 output "audit_log_bucket_name" {
   description = "S3 bucket used for CloudTrail and AWS Config logs"
-  value       = var.enable_security_baseline ? module.security_baseline[0].audit_log_bucket_name : null
+  value       = module.security_baseline.audit_log_bucket_name
 }
 
 output "cloudtrail_arn" {
   description = "CloudTrail ARN"
-  value       = var.enable_security_baseline ? module.security_baseline[0].cloudtrail_arn : null
+  value       = module.security_baseline.cloudtrail_arn
 }
 
 output "guardduty_detector_id" {
   description = "GuardDuty detector ID"
-  value       = var.enable_security_baseline ? module.security_baseline[0].guardduty_detector_id : null
+  value       = module.security_baseline.guardduty_detector_id
 }
 
 output "connection_string" {

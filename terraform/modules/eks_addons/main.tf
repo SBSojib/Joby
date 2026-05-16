@@ -158,3 +158,36 @@ resource "helm_release" "aws_for_fluent_bit" {
     value = aws_iam_role.addon["fluent_bit"].arn
   }
 }
+
+resource "helm_release" "adot_collector" {
+  name             = "adot-collector"
+  namespace        = var.observability_namespace
+  create_namespace = true
+  repository       = "https://aws-observability.github.io/aws-otel-helm-charts"
+  chart            = "adot-exporter-for-eks-on-ec2"
+
+  set {
+    name  = "awsRegion"
+    value = var.aws_region
+  }
+
+  set {
+    name  = "clusterName"
+    value = var.cluster_name
+  }
+
+  set {
+    name  = "serviceAccount.create"
+    value = "true"
+  }
+
+  set {
+    name  = "serviceAccount.name"
+    value = "adot-collector"
+  }
+
+  set {
+    name  = "serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn"
+    value = aws_iam_role.addon["adot_collector"].arn
+  }
+}

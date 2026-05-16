@@ -14,15 +14,9 @@ variable "domain_name" {
 }
 
 variable "app_subdomain" {
-  description = "Subdomain used by the public application endpoint"
+  description = "Subdomain used by the public application"
   type        = string
   default     = "app"
-}
-
-variable "waf_rate_limit" {
-  description = "Maximum requests per five-minute period from a single IP"
-  type        = number
-  default     = 2000
 }
 
 variable "tags" {

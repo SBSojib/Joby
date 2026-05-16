@@ -40,6 +40,7 @@ env:
   CORS_ALLOWED_ORIGIN: ${{ vars.CORS_ALLOWED_ORIGIN }}
   S3_BUCKET_NAME: ${{ vars.S3_BUCKET_NAME }}
   APP_HOSTNAME: ${{ vars.APP_HOSTNAME }}
+  ORIGIN_HOSTNAME: ${{ vars.ORIGIN_HOSTNAME }}
   ACM_CERTIFICATE_ARN: ${{ vars.ACM_CERTIFICATE_ARN }}
   WAF_WEB_ACL_ARN: ${{ vars.WAF_WEB_ACL_ARN }}
   BACKEND_IRSA_ROLE_ARN: ${{ vars.BACKEND_IRSA_ROLE_ARN }}
@@ -182,7 +183,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          for required in S3_BUCKET_NAME APP_HOSTNAME ACM_CERTIFICATE_ARN WAF_WEB_ACL_ARN BACKEND_IRSA_ROLE_ARN APPLICATION_SECRET_NAME; do
+          for required in S3_BUCKET_NAME APP_HOSTNAME ORIGIN_HOSTNAME ACM_CERTIFICATE_ARN WAF_WEB_ACL_ARN BACKEND_IRSA_ROLE_ARN APPLICATION_SECRET_NAME; do
             if [ -z "${!required}" ]; then
               echo "$required must be set as a GitHub repository variable." >&2
               exit 1
@@ -193,7 +194,7 @@ jobs:
           cp -R k8s/eks/. "$workdir/"
           cors_origin="${CORS_ALLOWED_ORIGIN:-https://${APP_HOSTNAME}}"
 
-          python3 - <<'PY' "$workdir" "${{ steps.settings.outputs.backend_image }}" "${{ steps.settings.outputs.frontend_image }}" "$S3_BUCKET_NAME" "$AWS_REGION" "$cors_origin" "$APP_HOSTNAME" "$ACM_CERTIFICATE_ARN" "$WAF_WEB_ACL_ARN" "$BACKEND_IRSA_ROLE_ARN" "$APPLICATION_SECRET_NAME"
+          python3 - <<'PY' "$workdir" "${{ steps.settings.outputs.backend_image }}" "${{ steps.settings.outputs.frontend_image }}" "$S3_BUCKET_NAME" "$AWS_REGION" "$cors_origin" "$APP_HOSTNAME" "$ORIGIN_HOSTNAME" "$ACM_CERTIFICATE_ARN" "$WAF_WEB_ACL_ARN" "$BACKEND_IRSA_ROLE_ARN" "$APPLICATION_SECRET_NAME"
           import sys
           from pathlib import Path
 
@@ -206,10 +207,12 @@ jobs:
               'AWS_REGION: "us-east-1"': f'AWS_REGION: "{sys.argv[5]}"',
               'Cors__AllowedOrigins__0: "http://localhost"': f'Cors__AllowedOrigins__0: "{sys.argv[6]}"',
               "REPLACE_WITH_APP_HOSTNAME": sys.argv[7],
-              "REPLACE_WITH_ACM_CERTIFICATE_ARN": sys.argv[8],
-              "REPLACE_WITH_WAF_WEB_ACL_ARN": sys.argv[9],
-              "REPLACE_WITH_BACKEND_IRSA_ROLE_ARN": sys.argv[10],
-              "REPLACE_WITH_APPLICATION_SECRET_NAME": sys.argv[11],
+              "REPLACE_WITH_ORIGIN_HOSTNAME": sys.argv[8],
+              "REPLACE_WITH_ACM_CERTIFICATE_ARN": sys.argv[9],
+              "REPLACE_WITH_WAF_WEB_ACL_ARN": sys.argv[10],
+              "REPLACE_WITH_BACKEND_IRSA_ROLE_ARN": sys.argv[11],
+              "REPLACE_WITH_APPLICATION_SECRET_NAME": sys.argv[12],
+              "REPLACE_WITH_ENVIRONMENT": "${{ env.DEPLOY_ENVIRONMENT }}",
           }
 
           for manifest in ("backend.yaml", "frontend.yaml", "configmap.yaml", "ingress.yaml", "serviceaccount.yaml", "clustersecretstore.yaml", "externalsecret.yaml"):

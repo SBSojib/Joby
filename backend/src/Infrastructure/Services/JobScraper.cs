@@ -1,3 +1,5 @@
+using System.Net;
+using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -11,6 +13,8 @@ namespace Joby.Infrastructure.Services;
 
 public class JobScraper : IJobScraper
 {
+    private const int MaxRedirects = 3;
+    private const int MaxHtmlBytes = 2 * 1024 * 1024;
     private readonly HttpClient _httpClient;
     private readonly ILogger<JobScraper> _logger;
 
@@ -24,26 +28,38 @@ public class JobScraper : IJobScraper
     {
         try
         {
-            _httpClient.DefaultRequestHeaders.Clear();
-            _httpClient.DefaultRequestHeaders.Add("User-Agent",
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
-            _httpClient.DefaultRequestHeaders.Add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
-            _httpClient.DefaultRequestHeaders.Add("Accept-Language", "en-US,en;q=0.5");
+            if (!Uri.TryCreate(url, UriKind.Absolute, out var requestUri)
+                || !await IsSafeHttpUriAsync(requestUri))
+            {
+                _logger.LogWarning("Rejected unsafe job scrape URL {Url}", url);
+                return null;
+            }
 
-            var response = await _httpClient.GetAsync(url);
+            using var response = await SendSafeGetAsync(requestUri);
+            if (response == null)
+            {
+                return null;
+            }
+
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogWarning("Failed to fetch URL {Url}: {StatusCode}", url, response.StatusCode);
                 return null;
             }
 
-            var html = await response.Content.ReadAsStringAsync();
+            var html = await ReadLimitedStringAsync(response.Content);
+            if (html == null)
+            {
+                _logger.LogWarning("Rejected oversized scrape response from URL {Url}", url);
+                return null;
+            }
+
             var doc = new HtmlDocument();
             doc.LoadHtml(html);
 
             var job = new CreateJobRequest
             {
-                SourceUrl = url
+                SourceUrl = requestUri.ToString()
             };
 
             // Try structured data first (JSON-LD)
@@ -79,6 +95,148 @@ public class JobScraper : IJobScraper
             _logger.LogError(ex, "Error scraping job from URL {Url}", url);
             return null;
         }
+    }
+
+    private async Task<HttpResponseMessage?> SendSafeGetAsync(Uri initialUri)
+    {
+        var currentUri = initialUri;
+
+        for (var redirectCount = 0; redirectCount <= MaxRedirects; redirectCount++)
+        {
+            if (!await IsSafeHttpUriAsync(currentUri))
+            {
+                _logger.LogWarning("Rejected unsafe job scrape URL {Url}", currentUri);
+                return null;
+            }
+
+            using var request = new HttpRequestMessage(HttpMethod.Get, currentUri);
+            request.Headers.UserAgent.ParseAdd(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+            request.Headers.Accept.ParseAdd("text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
+            request.Headers.AcceptLanguage.ParseAdd("en-US,en;q=0.5");
+
+            var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+            if (!IsRedirect(response.StatusCode))
+            {
+                return response;
+            }
+
+            var redirectUri = response.Headers.Location;
+            response.Dispose();
+            if (redirectUri == null)
+            {
+                return null;
+            }
+
+            currentUri = redirectUri.IsAbsoluteUri ? redirectUri : new Uri(currentUri, redirectUri);
+        }
+
+        _logger.LogWarning("Rejected job scrape URL {Url}: too many redirects", initialUri);
+        return null;
+    }
+
+    private static bool IsRedirect(HttpStatusCode statusCode)
+    {
+        var code = (int)statusCode;
+        return code is >= 300 and <= 399;
+    }
+
+    private static async Task<bool> IsSafeHttpUriAsync(Uri uri)
+    {
+        if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
+        {
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(uri.Host) || uri.UserInfo.Length > 0)
+        {
+            return false;
+        }
+
+        IPAddress[] addresses;
+        try
+        {
+            addresses = await Dns.GetHostAddressesAsync(uri.Host);
+        }
+        catch
+        {
+            return false;
+        }
+
+        return addresses.Length > 0 && addresses.All(IsPublicAddress);
+    }
+
+    private static bool IsPublicAddress(IPAddress address)
+    {
+        if (IPAddress.IsLoopback(address)
+            || address.Equals(IPAddress.Any)
+            || address.Equals(IPAddress.IPv6Any)
+            || address.Equals(IPAddress.None)
+            || address.Equals(IPAddress.Broadcast))
+        {
+            return false;
+        }
+
+        if (address.IsIPv4MappedToIPv6)
+        {
+            address = address.MapToIPv4();
+        }
+
+        var bytes = address.GetAddressBytes();
+        return address.AddressFamily switch
+        {
+            AddressFamily.InterNetwork => !IsPrivateIpv4(bytes),
+            AddressFamily.InterNetworkV6 => !IsPrivateIpv6(bytes),
+            _ => false
+        };
+    }
+
+    private static bool IsPrivateIpv4(byte[] bytes)
+    {
+        return bytes[0] == 10
+               || bytes[0] == 127
+               || (bytes[0] == 172 && bytes[1] is >= 16 and <= 31)
+               || (bytes[0] == 192 && bytes[1] == 168)
+               || (bytes[0] == 169 && bytes[1] == 254)
+               || bytes[0] == 0
+               || bytes[0] >= 224;
+    }
+
+    private static bool IsPrivateIpv6(byte[] bytes)
+    {
+        return (bytes[0] == 0
+                && bytes.Take(15).All(b => b == 0)
+                && bytes[15] == 1)
+               || bytes[0] is >= 0xfc and <= 0xfd
+               || bytes[0] == 0xfe && (bytes[1] & 0xc0) == 0x80
+               || bytes[0] == 0xff;
+    }
+
+    private static async Task<string?> ReadLimitedStringAsync(HttpContent content)
+    {
+        await using var stream = await content.ReadAsStreamAsync();
+        using var memory = new MemoryStream();
+        var buffer = new byte[81920];
+        var totalBytes = 0;
+
+        while (true)
+        {
+            var read = await stream.ReadAsync(buffer);
+            if (read == 0)
+            {
+                break;
+            }
+
+            totalBytes += read;
+            if (totalBytes > MaxHtmlBytes)
+            {
+                return null;
+            }
+
+            memory.Write(buffer, 0, read);
+        }
+
+        return Encoding.UTF8.GetString(memory.ToArray());
     }
 
     private bool TryParseJsonLd(string json, CreateJobRequest job)

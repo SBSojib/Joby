@@ -3,18 +3,13 @@ output "vpc_id" {
   value       = aws_vpc.this.id
 }
 
-output "subnet_ids" {
-  description = "Private subnet IDs used by compute and data resources"
-  value       = aws_subnet.private[*].id
-}
-
 output "public_subnet_ids" {
-  description = "Public subnet IDs used for load balancers and optional EC2 access"
+  description = "Public subnet IDs for load balancers"
   value       = aws_subnet.public[*].id
 }
 
 output "private_subnet_ids" {
-  description = "Private subnet IDs used by EKS nodes and RDS"
+  description = "Private subnet IDs for EKS nodes and RDS"
   value       = aws_subnet.private[*].id
 }
 

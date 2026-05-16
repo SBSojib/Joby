@@ -32,12 +32,23 @@ spec:
     metadata:
       labels:
         app: backend
+      annotations:
+        instrumentation.opentelemetry.io/inject-dotnet: "true"
     spec:
       serviceAccountName: joby-backend
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: backend
-          image: REPLACE_WITH_BACKEND_IMAGE
-          imagePullPolicy: Always
+          image: 123456789012.dkr.ecr.us-east-1.amazonaws.com/joby-prod-backend:a1b2c3d4e5f6789012345678901234abcd567890
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           ports:
             - containerPort: 5000
           envFrom:
@@ -45,6 +56,13 @@ spec:
                 name: joby-config
             - secretRef:
                 name: joby-secrets
+          env:
+            - name: OTEL_SERVICE_NAME
+              value: joby-backend
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: service.namespace=joby,deployment.environment=production
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: http://adot-collector.amazon-cloudwatch:4317
           resources:
             requests:
               memory: "256Mi"

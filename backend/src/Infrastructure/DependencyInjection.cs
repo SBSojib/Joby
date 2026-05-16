@@ -63,6 +63,10 @@ public static class DependencyInjection
         services.AddHttpClient<IJobScraper, JobScraper>(client =>
         {
             client.Timeout = TimeSpan.FromSeconds(30);
+        })
+        .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+        {
+            AllowAutoRedirect = false
         });
 
         // Services

@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { authApi, adminApi, setAccessToken, getAccessToken } from '@/lib/api';
+import { authApi, adminApi, setAccessToken } from '@/lib/api';
 import type { User, LoginRequest, RegisterRequest, RegisterPendingResponse } from '@/types';
 
 interface AuthContextType {
@@ -28,14 +28,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const initAuth = async () => {
-      const token = getAccessToken();
-      if (token) {
-        try {
-          const userData = await authApi.me();
-          setUser(userData);
-        } catch {
-          setAccessToken(null);
-        }
+      try {
+        const response = await authApi.refresh();
+        setAccessToken(response.accessToken);
+        setUser(response.user);
+      } catch {
+        setAccessToken(null);
       }
       setIsLoading(false);
     };

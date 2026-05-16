@@ -67,6 +67,11 @@ public class ExceptionHandlingMiddleware
                 errorResponse.Message = exception.Message;
                 break;
 
+            case OperationCanceledException when context.RequestAborted.IsCancellationRequested:
+                response.StatusCode = StatusCodes.Status499ClientClosedRequest;
+                errorResponse.Message = "Request was cancelled";
+                break;
+
             default:
                 _logger.LogError(exception, "Unhandled exception occurred");
                 response.StatusCode = (int)HttpStatusCode.InternalServerError;

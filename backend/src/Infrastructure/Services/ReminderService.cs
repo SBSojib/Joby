@@ -142,9 +142,22 @@ public class ReminderService : IReminderService
             throw new KeyNotFoundException("Reminder not found");
         }
 
+        var snoozedUntilUtc = request.SnoozedUntil.Kind switch
+        {
+            DateTimeKind.Utc => request.SnoozedUntil,
+            DateTimeKind.Local => request.SnoozedUntil.ToUniversalTime(),
+            DateTimeKind.Unspecified => DateTime.SpecifyKind(request.SnoozedUntil, DateTimeKind.Utc),
+            _ => request.SnoozedUntil.ToUniversalTime()
+        };
+
+        if (snoozedUntilUtc <= DateTime.UtcNow)
+        {
+            throw new ArgumentException("Snooze date and time must be in the future");
+        }
+
         reminder.Status = ReminderStatus.Snoozed;
-        reminder.SnoozedUntil = request.SnoozedUntil;
-        reminder.DueAt = request.SnoozedUntil;
+        reminder.SnoozedUntil = snoozedUntilUtc;
+        reminder.DueAt = snoozedUntilUtc;
         reminder.EmailSentAt = null;
 
         await _context.SaveChangesAsync();

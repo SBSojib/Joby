@@ -19,6 +19,9 @@ public class CreateReminderRequestValidator : AbstractValidator<CreateReminderRe
         RuleFor(x => x.Description)
             .MaximumLength(2000);
 
+        RuleFor(x => x.ReminderType)
+            .MaximumLength(100);
+
         RuleFor(x => x)
             .Must(x => x.ApplicationId.HasValue || x.JobId.HasValue)
             .WithMessage("Link the reminder to a job (jobId) or application (applicationId).");
@@ -35,6 +38,29 @@ public class CreateReminderRequestValidator : AbstractValidator<CreateReminderRe
             _ => dueAt.ToUniversalTime()
         };
         return utc > DateTime.UtcNow.AddMinutes(-5);
+    }
+}
+
+public class SnoozeReminderRequestValidator : AbstractValidator<SnoozeReminderRequest>
+{
+    public SnoozeReminderRequestValidator()
+    {
+        RuleFor(x => x.SnoozedUntil)
+            .NotEmpty().WithMessage("Snooze date and time are required")
+            .Must(BeInTheFutureUtc)
+            .WithMessage("Snooze date and time must be in the future");
+    }
+
+    private static bool BeInTheFutureUtc(DateTime snoozedUntil)
+    {
+        var utc = snoozedUntil.Kind switch
+        {
+            DateTimeKind.Utc => snoozedUntil,
+            DateTimeKind.Local => snoozedUntil.ToUniversalTime(),
+            DateTimeKind.Unspecified => DateTime.SpecifyKind(snoozedUntil, DateTimeKind.Utc),
+            _ => snoozedUntil.ToUniversalTime()
+        };
+        return utc > DateTime.UtcNow;
     }
 }
 

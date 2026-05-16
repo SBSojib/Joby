@@ -22,6 +22,12 @@ variable "application_log_group_name" {
   type = string
 }
 
+variable "waf_web_acl_name" {
+  description = "Regional WAF Web ACL name for the blocked-requests alarm"
+  type        = string
+  default     = ""
+}
+
 variable "alert_email" {
   type    = string
   default = ""

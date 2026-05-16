@@ -37,14 +37,8 @@ variable "private_subnet_cidrs" {
   default     = ["10.20.10.0/24", "10.20.11.0/24", "10.20.12.0/24"]
 }
 
-variable "enable_nat_gateway" {
-  description = "Create NAT gateway egress for private subnets"
-  type        = bool
-  default     = true
-}
-
 variable "single_nat_gateway" {
-  description = "Use one NAT gateway instead of one per Availability Zone"
+  description = "Use one NAT gateway instead of one per Availability Zone (lower cost, single point of failure)"
   type        = bool
   default     = false
 }
@@ -53,27 +47,6 @@ variable "kubernetes_cluster_name" {
   description = "EKS cluster name used for load balancer subnet discovery tags"
   type        = string
   default     = ""
-}
-
-variable "enable_vpc_endpoints" {
-  description = "Create VPC endpoints for private AWS API access"
-  type        = bool
-  default     = true
-}
-
-variable "interface_endpoint_services" {
-  description = "AWS service short names for interface VPC endpoints"
-  type        = list(string)
-  default = [
-    "ecr.api",
-    "ecr.dkr",
-    "logs",
-    "secretsmanager",
-    "ssm",
-    "ssmmessages",
-    "ec2messages",
-    "sts"
-  ]
 }
 
 variable "tags" {

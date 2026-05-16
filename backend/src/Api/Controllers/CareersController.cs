@@ -1,3 +1,4 @@
+using System.Net.Mail;
 using System.Text;
 using Joby.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -45,7 +46,7 @@ public class CareersController : ControllerBase
         if (string.IsNullOrWhiteSpace(fullName) || fullName.Length > 200)
             return BadRequest(new { message = "Please provide your full name (max 200 characters)." });
 
-        if (string.IsNullOrWhiteSpace(email) || email.Length > 256 || !email.Contains('@', StringComparison.Ordinal))
+        if (!IsValidEmail(email))
             return BadRequest(new { message = "Please provide a valid email address." });
 
         if (resume == null || resume.Length == 0)
@@ -58,12 +59,19 @@ public class CareersController : ControllerBase
         if (string.IsNullOrEmpty(ext) || !AllowedExtensions.Contains(ext))
             return BadRequest(new { message = "Resume must be a PDF or Word document (.pdf, .doc, .docx)." });
 
-        var recipient = _configuration["Careers:RecipientEmail"]?.Trim()
-            ?? "sojib.24csedu.037@gmail.com";
+        var recipient = _configuration["Careers:RecipientEmail"]?.Trim();
+        if (string.IsNullOrWhiteSpace(recipient))
+        {
+            _logger.LogError("Career application recipient is not configured");
+            return StatusCode(StatusCodes.Status503ServiceUnavailable,
+                new { message = "We could not deliver your application right now. Please try again later." });
+        }
 
         await using var ms = new MemoryStream();
         await resume.CopyToAsync(ms, cancellationToken);
         var bytes = ms.ToArray();
+        if (!IsSupportedResumeSignature(bytes, ext))
+            return BadRequest(new { message = "Resume contents do not match a supported document format." });
 
         var body = new StringBuilder()
             .AppendLine("New career application (Joby)")
@@ -96,5 +104,53 @@ public class CareersController : ControllerBase
         }
 
         return Accepted(new { message = "Thank you — your application was submitted." });
+    }
+
+    private static bool IsValidEmail(string? email)
+    {
+        if (string.IsNullOrWhiteSpace(email) || email.Length > 256)
+            return false;
+
+        try
+        {
+            var address = new MailAddress(email);
+            return string.Equals(address.Address, email.Trim(), StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static bool IsSupportedResumeSignature(byte[] bytes, string extension)
+    {
+        if (string.Equals(extension, ".pdf", StringComparison.OrdinalIgnoreCase))
+        {
+            return bytes.Length >= 4
+                   && bytes[0] == 0x25
+                   && bytes[1] == 0x50
+                   && bytes[2] == 0x44
+                   && bytes[3] == 0x46;
+        }
+
+        if (string.Equals(extension, ".docx", StringComparison.OrdinalIgnoreCase))
+        {
+            return bytes.Length >= 4
+                   && bytes[0] == 0x50
+                   && bytes[1] == 0x4b
+                   && bytes[2] == 0x03
+                   && bytes[3] == 0x04;
+        }
+
+        return string.Equals(extension, ".doc", StringComparison.OrdinalIgnoreCase)
+               && bytes.Length >= 8
+               && bytes[0] == 0xd0
+               && bytes[1] == 0xcf
+               && bytes[2] == 0x11
+               && bytes[3] == 0xe0
+               && bytes[4] == 0xa1
+               && bytes[5] == 0xb1
+               && bytes[6] == 0x1a
+               && bytes[7] == 0xe1;
     }
 }

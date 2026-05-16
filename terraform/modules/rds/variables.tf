@@ -37,29 +37,23 @@ variable "db_password" {
 variable "instance_class" {
   description = "RDS instance class"
   type        = string
-  default     = "db.t3.micro"
+  default     = "db.t3.medium"
 }
 
 variable "allocated_storage" {
   description = "Allocated storage in GB"
   type        = number
-  default     = 20
+  default     = 50
 }
 
 variable "max_allocated_storage" {
   description = "Maximum RDS storage in GB for autoscaling"
   type        = number
-  default     = 100
+  default     = 200
 }
 
 variable "multi_az" {
   description = "Enable synchronous standby in another Availability Zone"
-  type        = bool
-  default     = true
-}
-
-variable "performance_insights_enabled" {
-  description = "Enable Performance Insights"
   type        = bool
   default     = true
 }
@@ -80,18 +74,6 @@ variable "deletion_protection" {
   description = "Enable deletion protection"
   type        = bool
   default     = true
-}
-
-variable "enabled_cloudwatch_logs_exports" {
-  description = "RDS PostgreSQL log exports"
-  type        = list(string)
-  default     = ["postgresql", "upgrade"]
-}
-
-variable "monitoring_interval" {
-  description = "Enhanced monitoring interval in seconds"
-  type        = number
-  default     = 60
 }
 
 variable "tags" {

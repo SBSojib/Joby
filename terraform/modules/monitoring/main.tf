@@ -32,6 +32,18 @@ resource "aws_cloudwatch_log_metric_filter" "app_errors" {
   }
 }
 
+resource "aws_cloudwatch_log_metric_filter" "app_warnings" {
+  name           = "${local.name_prefix}-app-warnings"
+  pattern        = "WARN"
+  log_group_name = var.application_log_group_name
+
+  metric_transformation {
+    name      = "AppWarningCount"
+    namespace = local.custom_namespace
+    value     = "1"
+  }
+}
+
 resource "aws_cloudwatch_metric_alarm" "rds_cpu_high" {
   alarm_name          = "${local.name_prefix}-rds-cpu-high"
   comparison_operator = "GreaterThanThreshold"
@@ -105,8 +117,8 @@ resource "aws_cloudwatch_metric_alarm" "eks_failed_requests" {
   }
 }
 
-resource "aws_cloudwatch_metric_alarm" "joby_app_errors" {
-  alarm_name          = "${local.name_prefix}-joby-app-errors"
+resource "aws_cloudwatch_metric_alarm" "app_errors" {
+  alarm_name          = "${local.name_prefix}-app-errors"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
   metric_name         = aws_cloudwatch_log_metric_filter.app_errors.metric_transformation[0].name
@@ -115,9 +127,47 @@ resource "aws_cloudwatch_metric_alarm" "joby_app_errors" {
   statistic           = "Sum"
   threshold           = 0
   treat_missing_data  = "notBreaching"
-  alarm_description   = "Joby application logged errors."
+  alarm_description   = "${var.project_name} application logged errors."
   alarm_actions       = local.alarm_actions
   ok_actions          = local.ok_actions
+}
+
+resource "aws_cloudwatch_metric_alarm" "app_warnings_high" {
+  alarm_name          = "${local.name_prefix}-app-warnings-high"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 2
+  metric_name         = aws_cloudwatch_log_metric_filter.app_warnings.metric_transformation[0].name
+  namespace           = local.custom_namespace
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 25
+  treat_missing_data  = "notBreaching"
+  alarm_description   = "${var.project_name} application logged elevated warnings."
+  alarm_actions       = local.alarm_actions
+  ok_actions          = local.ok_actions
+}
+
+resource "aws_cloudwatch_metric_alarm" "waf_blocked_requests" {
+  count = var.waf_web_acl_name != "" ? 1 : 0
+
+  alarm_name          = "${local.name_prefix}-waf-blocked-requests"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 1
+  metric_name         = "BlockedRequests"
+  namespace           = "AWS/WAFV2"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 100
+  treat_missing_data  = "notBreaching"
+  alarm_description   = "WAF is blocking elevated application traffic."
+  alarm_actions       = local.alarm_actions
+  ok_actions          = local.ok_actions
+
+  dimensions = {
+    WebACL = var.waf_web_acl_name
+    Region = var.aws_region
+    Rule   = "ALL"
+  }
 }
 
 resource "aws_cloudwatch_dashboard" "operations" {
@@ -191,7 +241,7 @@ resource "aws_cloudwatch_dashboard" "operations" {
         width  = 24
         height = 6
         properties = {
-          title   = "Joby App Errors"
+          title   = "App Errors"
           region  = var.aws_region
           view    = "timeSeries"
           stat    = "Sum"

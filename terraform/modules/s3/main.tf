@@ -1,14 +1,13 @@
 resource "aws_s3_bucket" "uploads" {
-  bucket        = var.bucket_name
-  force_destroy = var.force_destroy
-  tags          = var.tags
+  bucket = var.bucket_name
+  tags   = var.tags
 }
 
 resource "aws_s3_bucket_versioning" "uploads" {
   bucket = aws_s3_bucket.uploads.id
 
   versioning_configuration {
-    status = var.versioning_enabled ? "Enabled" : "Suspended"
+    status = "Enabled"
   }
 }
 
@@ -76,14 +75,14 @@ resource "aws_s3_bucket_lifecycle_configuration" "uploads" {
 
   rule {
     id     = "expire-noncurrent-uploads"
-    status = var.versioning_enabled ? "Enabled" : "Disabled"
+    status = "Enabled"
 
     filter {
       prefix = ""
     }
 
     noncurrent_version_expiration {
-      noncurrent_days = var.noncurrent_version_expiration_days
+      noncurrent_days = 30
     }
 
     abort_incomplete_multipart_upload {

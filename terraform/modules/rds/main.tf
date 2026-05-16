@@ -12,8 +12,6 @@ resource "random_id" "final_snapshot" {
 }
 
 data "aws_iam_policy_document" "enhanced_monitoring_assume_role" {
-  count = var.monitoring_interval > 0 ? 1 : 0
-
   statement {
     actions = ["sts:AssumeRole"]
 
@@ -25,17 +23,13 @@ data "aws_iam_policy_document" "enhanced_monitoring_assume_role" {
 }
 
 resource "aws_iam_role" "enhanced_monitoring" {
-  count = var.monitoring_interval > 0 ? 1 : 0
-
   name               = "${var.project_name}-${var.environment}-rds-monitoring"
-  assume_role_policy = data.aws_iam_policy_document.enhanced_monitoring_assume_role[0].json
+  assume_role_policy = data.aws_iam_policy_document.enhanced_monitoring_assume_role.json
   tags               = var.tags
 }
 
 resource "aws_iam_role_policy_attachment" "enhanced_monitoring" {
-  count = var.monitoring_interval > 0 ? 1 : 0
-
-  role       = aws_iam_role.enhanced_monitoring[0].name
+  role       = aws_iam_role.enhanced_monitoring.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonRDSEnhancedMonitoringRole"
 }
 
@@ -64,16 +58,16 @@ resource "aws_db_instance" "this" {
   backup_window                   = "03:00-04:00"
   maintenance_window              = "sun:04:30-sun:05:30"
   auto_minor_version_upgrade      = true
-  enabled_cloudwatch_logs_exports = var.enabled_cloudwatch_logs_exports
+  enabled_cloudwatch_logs_exports = ["postgresql", "upgrade"]
 
   skip_final_snapshot       = var.skip_final_snapshot
   final_snapshot_identifier = var.skip_final_snapshot ? null : "${var.project_name}-${var.environment}-final-${random_id.final_snapshot.hex}"
   deletion_protection       = var.deletion_protection
   copy_tags_to_snapshot     = true
 
-  performance_insights_enabled = var.performance_insights_enabled
-  monitoring_interval          = var.monitoring_interval
-  monitoring_role_arn          = var.monitoring_interval > 0 ? aws_iam_role.enhanced_monitoring[0].arn : null
+  performance_insights_enabled = true
+  monitoring_interval          = 60
+  monitoring_role_arn          = aws_iam_role.enhanced_monitoring.arn
 
   tags = merge(var.tags, {
     Name = "${var.project_name}-${var.environment}-postgres"

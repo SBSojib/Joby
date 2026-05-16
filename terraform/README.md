@@ -3,14 +3,15 @@
 This stack provisions the AWS foundation for running Joby on EKS with managed AWS services around it:
 
 - Dedicated VPC with public and private subnets across multiple Availability Zones
-- Route 53 public hosted zone, ACM certificate, and WAF Web ACL for the public application edge
+- Route 53 public hosted zone, CloudFront, ACM certificates, and WAF Web ACLs for the public application edge
 - EKS cluster with managed node group, control-plane logs, managed core add-ons, and OIDC for IRSA
-- Terraform-managed Helm add-ons for AWS Load Balancer Controller, External Secrets Operator, ExternalDNS, metrics-server, cluster-autoscaler, and Fluent Bit
+- Terraform-managed Helm add-ons for AWS Load Balancer Controller, External Secrets Operator, ExternalDNS, metrics-server, cluster-autoscaler, Fluent Bit, and ADOT telemetry
 - ECR repositories for backend and frontend images
 - Private RDS PostgreSQL
 - Private S3 uploads bucket
 - AWS Secrets Manager for runtime secrets
-- CloudWatch logs, alarms, dashboard, and optional SNS email alerts
+- CloudWatch logs, X-Ray/ADOT telemetry, alarms, dashboard, and optional SNS email alerts
+- AWS Budgets and Cost Anomaly Detection for billing guardrails
 - CloudTrail, GuardDuty, AWS Config, and Security Hub baseline
 - Least-privilege IAM role for the backend Kubernetes service account to access the uploads bucket
 - Optional EC2 host for legacy Docker Compose deployments (`provision_ec2 = true`)
@@ -24,7 +25,7 @@ Traffic should enter through an AWS load balancer in the public subnets and then
 The Terraform modules are intentionally small and service-oriented:
 
 - `network`: owns the VPC, subnets, internet gateway, NAT gateways, route tables, VPC endpoints, and Kubernetes subnet discovery tags.
-- `edge`: owns Route 53, ACM certificate validation, and WAF rules for the public application endpoint.
+- `edge`: owns Route 53, CloudFront, ACM certificate validation, and WAF rules for the public application endpoint.
 - `eks`: owns the EKS control plane, node role, managed node group, managed add-ons, OIDC provider, and node security group.
 - `eks_addons`: owns Terraform-managed Helm add-ons and their IRSA roles.
 - `rds`: owns PostgreSQL, backups, encryption, final snapshot behavior, and deletion protection.
@@ -34,6 +35,7 @@ The Terraform modules are intentionally small and service-oriented:
 - `secrets`: owns the Secrets Manager application secret metadata and optional managed secret value.
 - `security_baseline`: owns CloudTrail, GuardDuty, AWS Config, Security Hub, and the audit log bucket.
 - `security`: owns application and database security groups.
+- `cost_controls`: owns AWS Budgets and Cost Anomaly Detection.
 - `logging` and `monitoring`: own CloudWatch logs, alarms, dashboard, and optional SNS alerting.
 
 ## Architectural Decisions
@@ -54,9 +56,9 @@ Private subnets use NAT gateway egress by default. This lets EKS nodes pull cont
 
 The stack creates private endpoints for S3, ECR, CloudWatch Logs, STS, Secrets Manager, and SSM-related services. This reduces dependency on NAT gateways for AWS API traffic and keeps common control-plane calls on the AWS network. NAT remains useful for non-AWS internet egress.
 
-### ALB, ACM, Route 53, And WAF
+### CloudFront, ALB, ACM, Route 53, And WAF
 
-The public application edge uses Route 53 for DNS, ACM for TLS, AWS Load Balancer Controller for ALB provisioning, and WAF managed rules for common web attacks and rate limiting. This is the standard AWS pattern for public Kubernetes web applications because Kubernetes owns service routing while AWS owns edge TLS, DNS, and threat filtering.
+The public application edge uses Route 53 for DNS, CloudFront for global edge delivery, ACM for TLS, AWS Load Balancer Controller for ALB provisioning, and WAF managed rules for common web attacks and rate limiting. CloudFront serves `app.<domain>` while the ALB is exposed through `origin.app.<domain>` for the distribution origin. This keeps the user-facing endpoint at the edge while still allowing Kubernetes to own service routing.
 
 ### EKS Managed Node Group
 
@@ -94,9 +96,17 @@ ECR repositories scan images on push, use encryption, expire untagged images, an
 
 CloudTrail records account API activity, GuardDuty monitors threat signals, AWS Config records resource configuration history, and Security Hub enables centralized posture findings. These services are account-level controls and should stay enabled in production accounts.
 
+### Telemetry
+
+The EKS add-on stack installs ADOT and CloudWatch observability components so application traces and container metrics can flow to AWS-native telemetry services. The backend deployment includes OpenTelemetry environment settings and is ready to export to the in-cluster ADOT collector.
+
+### Cost Controls
+
+AWS Budgets alerts on forecasted and actual monthly spend, while Cost Anomaly Detection watches service-level spend changes. Both use the billing alert email when configured, falling back to the monitoring alert email.
+
 ### CloudWatch Monitoring
 
-The stack creates a CloudWatch dashboard and alarms for RDS health, EKS API failures, and application error logs. This gives a small team immediate operational visibility without introducing another monitoring platform. SNS email alerts are optional because email subscriptions require recipient confirmation.
+The stack creates a CloudWatch dashboard and alarms for RDS health, EKS API failures, CloudFront 4xx/5xx errors, WAF blocks, and application warning/error logs. This gives a small team immediate operational visibility without introducing another monitoring platform. SNS email alerts are optional because email subscriptions require recipient confirmation.
 
 ### Optional EC2 Legacy Mode
 
@@ -181,6 +191,7 @@ For temporary development environments, reduce cost explicitly in your var files
 - Set `db_multi_az = false`, `db_deletion_protection = false`, `db_skip_final_snapshot = true`, and lower RDS sizing.
 - Set `enable_security_baseline = false` only for disposable sandboxes.
 - Leave `enable_kubernetes_addons = false` until the EKS cluster has been created once.
+- Set `monthly_budget_limit_usd` to match the target environment and provide `billing_alert_email` for cost alerts.
 
 ## Provision
 
@@ -207,6 +218,9 @@ The first apply creates the EKS API endpoint. The second apply lets the Helm pro
 - `vpc_id`
 - `route53_name_servers`
 - `app_hostname`
+- `origin_hostname`
+- `cloudfront_distribution_id`
+- `cloudfront_distribution_domain_name`
 - `acm_certificate_arn`
 - `waf_web_acl_arn`
 - `private_subnet_ids`
@@ -220,10 +234,12 @@ The first apply creates the EKS API endpoint. The second apply lets the Helm pro
 - `rds_address`
 - `s3_bucket_name`
 - `application_secret_name`
+- `monthly_budget_name`
+- `cost_anomaly_monitor_arn`
 - `monitoring_dashboard_name`
 
 ## Deploy Joby To EKS
 
 Use `k8s/eks/README.md` for the deployment sequence.
 
-The EKS manifests include placeholders for `backend_irsa_role_arn`, `application_secret_name`, `app_hostname`, `acm_certificate_arn`, and `waf_web_acl_arn`. The GitHub deploy workflow renders those values from repository variables populated from Terraform outputs.
+The EKS manifests include placeholders for `backend_irsa_role_arn`, `application_secret_name`, `origin_hostname`, `acm_certificate_arn`, and `waf_web_acl_arn`. The GitHub deploy workflow renders those values from repository variables populated from Terraform outputs. Users access `app_hostname`, which resolves to CloudFront.

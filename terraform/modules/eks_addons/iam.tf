@@ -10,6 +10,7 @@ data "aws_iam_policy_document" "assume_role" {
     external_dns                 = "system:serviceaccount:${var.external_dns_namespace}:external-dns"
     cluster_autoscaler           = "system:serviceaccount:kube-system:cluster-autoscaler"
     fluent_bit                   = "system:serviceaccount:${var.observability_namespace}:aws-for-fluent-bit"
+    adot_collector               = "system:serviceaccount:${var.observability_namespace}:adot-collector"
   }
 
   statement {
@@ -222,5 +223,15 @@ resource "aws_iam_role_policy" "cluster_autoscaler" {
 
 resource "aws_iam_role_policy_attachment" "fluent_bit" {
   role       = aws_iam_role.addon["fluent_bit"].name
+  policy_arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
+}
+
+resource "aws_iam_role_policy_attachment" "adot_xray" {
+  role       = aws_iam_role.addon["adot_collector"].name
+  policy_arn = "arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess"
+}
+
+resource "aws_iam_role_policy_attachment" "adot_cloudwatch" {
+  role       = aws_iam_role.addon["adot_collector"].name
   policy_arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
 }

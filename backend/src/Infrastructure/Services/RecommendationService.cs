@@ -11,6 +11,7 @@ namespace Joby.Infrastructure.Services;
 
 public class RecommendationService : IRecommendationService
 {
+    private const int MaxTopRecommendations = 50;
     private readonly ApplicationDbContext _context;
     private readonly ILogger<RecommendationService> _logger;
 
@@ -87,6 +88,8 @@ public class RecommendationService : IRecommendationService
 
     public async Task<List<JobWithRecommendationDto>> GetTopRecommendationsAsync(Guid userId, int count = 10)
     {
+        count = Math.Clamp(count, 1, MaxTopRecommendations);
+
         var recommendations = await _context.Recommendations
             .Include(r => r.Job)
                 .ThenInclude(j => j.Application)

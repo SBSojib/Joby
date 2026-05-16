@@ -17,3 +17,8 @@ output "cluster_secret_store_name" {
   description = "ClusterSecretStore name used by ExternalSecret resources"
   value       = "aws-secrets-manager"
 }
+
+output "adot_collector_role_arn" {
+  description = "IRSA role ARN for ADOT Collector"
+  value       = aws_iam_role.addon["adot_collector"].arn
+}

@@ -132,7 +132,7 @@ resource "aws_wafv2_web_acl" "app" {
     statement {
       rate_based_statement {
         aggregate_key_type = "IP"
-        limit              = var.waf_rate_limit
+        limit              = 2000
       }
     }
 

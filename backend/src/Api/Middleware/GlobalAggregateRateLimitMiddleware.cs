@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Text.Json;
 using Microsoft.Extensions.Options;
 
 namespace Joby.Api.Middleware;
@@ -63,10 +64,15 @@ public sealed class GlobalAggregateRateLimitMiddleware
         if (reject)
         {
             context.Response.StatusCode = StatusCodes.Status429TooManyRequests;
-            context.Response.ContentType = "text/plain; charset=utf-8";
-            await context.Response.WriteAsync(
-                "Too many requests (application-wide limit).",
-                context.RequestAborted);
+            context.Response.ContentType = "application/json";
+            var response = JsonSerializer.Serialize(new ErrorResponse
+            {
+                Message = "Too many requests (application-wide limit)."
+            }, new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            });
+            await context.Response.WriteAsync(response, context.RequestAborted);
             return;
         }
 

@@ -41,12 +41,12 @@ variable "node_max_size" {
 
 variable "cluster_public_access_cidrs" {
   type    = list(string)
-  default = ["0.0.0.0/0"]
+  default = []
 }
 
 variable "cluster_endpoint_public_access" {
   type    = bool
-  default = true
+  default = false
 }
 
 variable "cluster_endpoint_private_access" {
@@ -65,7 +65,8 @@ variable "cluster_addons" {
     "coredns",
     "kube-proxy",
     "vpc-cni",
-    "aws-ebs-csi-driver"
+    "aws-ebs-csi-driver",
+    "amazon-cloudwatch-observability"
   ]
 }
 

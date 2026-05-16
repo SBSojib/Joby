@@ -47,6 +47,9 @@ env:
   TF_VAR_manage_application_secret_value: ${{ secrets.JWT_SECRET != '' }}
   TF_VAR_enable_kubernetes_addons: ${{ inputs.enable_kubernetes_addons }}
   TF_VAR_monitoring_alert_email: ${{ vars.MONITORING_ALERT_EMAIL || '' }}
+  TF_VAR_billing_alert_email: ${{ vars.BILLING_ALERT_EMAIL || vars.MONITORING_ALERT_EMAIL || '' }}
+  TF_VAR_monthly_budget_limit_usd: ${{ vars.MONTHLY_BUDGET_LIMIT_USD || 250 }}
+  TF_VAR_cost_anomaly_threshold_usd: ${{ vars.COST_ANOMALY_THRESHOLD_USD || 25 }}
 
 jobs:
   terraform:

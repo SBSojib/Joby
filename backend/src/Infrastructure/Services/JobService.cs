@@ -12,6 +12,7 @@ namespace Joby.Infrastructure.Services;
 
 public class JobService : IJobService
 {
+    private const int MaxPageSize = 100;
     private readonly ApplicationDbContext _context;
     private readonly IJobScraper _jobScraper;
     private readonly IRecommendationService _recommendationService;
@@ -209,6 +210,9 @@ public class JobService : IJobService
 
     public async Task<PagedResult<JobWithRecommendationDto>> GetRecommendedJobsAsync(Guid userId, int page, int pageSize)
     {
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, MaxPageSize);
+
         var query = _context.Recommendations
             .Include(r => r.Job)
                 .ThenInclude(j => j.Application)
@@ -259,6 +263,9 @@ public class JobService : IJobService
 
     public async Task<PagedResult<JobDto>> SearchJobsAsync(Guid userId, JobSearchRequest request)
     {
+        request.Page = Math.Max(1, request.Page);
+        request.PageSize = Math.Clamp(request.PageSize, 1, MaxPageSize);
+
         var query = _context.Jobs
             .Include(j => j.Application)
             .Where(j => j.UserId == userId);

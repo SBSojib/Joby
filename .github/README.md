@@ -27,6 +27,7 @@ Joby uses GitHub Actions for pull request validation, infrastructure changes, an
 - `DOMAIN_NAME`: root domain for the Route 53 hosted zone, for example `example.com`.
 - `APP_SUBDOMAIN`: subdomain for the application. Defaults to `app`.
 - `APP_HOSTNAME`: public application hostname from Terraform output `app_hostname`.
+- `ORIGIN_HOSTNAME`: ALB origin hostname from Terraform output `origin_hostname`.
 - `ACM_CERTIFICATE_ARN`: ACM certificate ARN from Terraform output `acm_certificate_arn`.
 - `WAF_WEB_ACL_ARN`: WAF Web ACL ARN from Terraform output `waf_web_acl_arn`.
 - `BACKEND_IRSA_ROLE_ARN`: backend service account IAM role from Terraform output `backend_irsa_role_arn`.
@@ -38,12 +39,15 @@ Joby uses GitHub Actions for pull request validation, infrastructure changes, an
 - `CORS_ALLOWED_ORIGIN`: public frontend origin allowed by the backend. Defaults to `https://${APP_HOSTNAME}` during deployment.
 - `VITE_API_URL`: defaults to `/api`.
 - `MONITORING_ALERT_EMAIL`: optional Terraform alert email.
+- `BILLING_ALERT_EMAIL`: optional Terraform billing alert email. Falls back to `MONITORING_ALERT_EMAIL`.
+- `MONTHLY_BUDGET_LIMIT_USD`: optional monthly budget limit. Defaults to `250`.
+- `COST_ANOMALY_THRESHOLD_USD`: optional cost anomaly impact threshold. Defaults to `25`.
 
 ## AWS Permissions
 
 The GitHub OIDC role needs permission to:
 
-- run Terraform against this stack, including EKS, ECR, RDS, S3, IAM, CloudWatch, SNS, Route 53, ACM, WAF, CloudTrail, GuardDuty, Config, Security Hub, Secrets Manager, and related network resources;
+- run Terraform against this stack, including EKS, ECR, RDS, S3, IAM, CloudWatch, SNS, Route 53, ACM, CloudFront, WAF, CloudTrail, GuardDuty, Config, Security Hub, Secrets Manager, Budgets, Cost Explorer, and related network resources;
 - push images to the backend and frontend ECR repositories;
 - describe ECR image scan findings;
 - call `eks:DescribeCluster`;

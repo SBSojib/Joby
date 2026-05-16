@@ -19,11 +19,16 @@ output "app_hostname" {
 }
 
 output "certificate_arn" {
-  description = "Validated ACM certificate ARN"
+  description = "Validated ACM certificate ARN for the ALB listener"
   value       = aws_acm_certificate_validation.app.certificate_arn
 }
 
 output "waf_web_acl_arn" {
   description = "Regional WAF Web ACL ARN"
   value       = aws_wafv2_web_acl.app.arn
+}
+
+output "waf_web_acl_name" {
+  description = "Regional WAF Web ACL name"
+  value       = aws_wafv2_web_acl.app.name
 }

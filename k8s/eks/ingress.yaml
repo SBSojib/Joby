@@ -10,11 +10,11 @@ metadata:
     alb.ingress.kubernetes.io/ssl-redirect: "443"
     alb.ingress.kubernetes.io/certificate-arn: REPLACE_WITH_ACM_CERTIFICATE_ARN
     alb.ingress.kubernetes.io/wafv2-acl-arn: REPLACE_WITH_WAF_WEB_ACL_ARN
-    external-dns.alpha.kubernetes.io/hostname: REPLACE_WITH_APP_HOSTNAME
+    external-dns.alpha.kubernetes.io/hostname: REPLACE_WITH_ORIGIN_HOSTNAME
 spec:
   ingressClassName: alb
   rules:
-    - host: REPLACE_WITH_APP_HOSTNAME
+    - host: REPLACE_WITH_ORIGIN_HOSTNAME
       http:
         paths:
           - path: /api

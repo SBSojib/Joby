@@ -42,8 +42,8 @@ public class ProfileController : ControllerBase
             return BadRequest(new { message = "File is required" });
         }
 
-        var allowedTypes = new[] { "application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document" };
-        if (!allowedTypes.Contains(file.ContentType))
+        var extension = Path.GetExtension(file.FileName);
+        if (!IsSupportedResumeExtension(extension))
         {
             return BadRequest(new { message = "Only PDF and DOCX files are allowed" });
         }
@@ -55,6 +55,12 @@ public class ProfileController : ControllerBase
 
         var userId = GetUserId();
         using var stream = file.OpenReadStream();
+        if (!IsSupportedResumeSignature(stream, extension))
+        {
+            return BadRequest(new { message = "File contents do not match a supported resume format" });
+        }
+
+        stream.Position = 0;
         var resume = await _profileService.UploadResumeAsync(userId, stream, file.FileName, file.ContentType);
         return Ok(resume);
     }
@@ -122,6 +128,22 @@ public class ProfileController : ControllerBase
             throw new UnauthorizedAccessException("Invalid user token");
         }
         return userId;
+    }
+
+    private static bool IsSupportedResumeExtension(string? extension)
+    {
+        return string.Equals(extension, ".pdf", StringComparison.OrdinalIgnoreCase)
+               || string.Equals(extension, ".docx", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsSupportedResumeSignature(Stream stream, string? extension)
+    {
+        Span<byte> header = stackalloc byte[8];
+        var read = stream.Read(header);
+
+        return string.Equals(extension, ".pdf", StringComparison.OrdinalIgnoreCase)
+            ? read >= 4 && header[0] == 0x25 && header[1] == 0x50 && header[2] == 0x44 && header[3] == 0x46
+            : read >= 4 && header[0] == 0x50 && header[1] == 0x4b && header[2] == 0x03 && header[3] == 0x04;
     }
 }
 

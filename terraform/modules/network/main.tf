@@ -2,6 +2,17 @@ locals {
   name_prefix      = "${var.project_name}-${var.environment}"
   cluster_tag_name = var.kubernetes_cluster_name != "" ? "kubernetes.io/cluster/${var.kubernetes_cluster_name}" : ""
   cluster_tags     = var.kubernetes_cluster_name != "" ? { (local.cluster_tag_name) = "shared" } : {}
+
+  interface_endpoint_services = [
+    "ecr.api",
+    "ecr.dkr",
+    "logs",
+    "secretsmanager",
+    "ssm",
+    "ssmmessages",
+    "ec2messages",
+    "sts",
+  ]
 }
 
 data "aws_availability_zones" "available" {
@@ -65,7 +76,7 @@ resource "aws_subnet" "private" {
 }
 
 resource "aws_eip" "nat" {
-  count = var.enable_nat_gateway ? (var.single_nat_gateway ? 1 : var.az_count) : 0
+  count = var.single_nat_gateway ? 1 : var.az_count
 
   domain = "vpc"
 
@@ -77,7 +88,7 @@ resource "aws_eip" "nat" {
 }
 
 resource "aws_nat_gateway" "this" {
-  count = var.enable_nat_gateway ? (var.single_nat_gateway ? 1 : var.az_count) : 0
+  count = var.single_nat_gateway ? 1 : var.az_count
 
   allocation_id = aws_eip.nat[count.index].id
   subnet_id     = aws_subnet.public[var.single_nat_gateway ? 0 : count.index].id
@@ -110,16 +121,13 @@ resource "aws_route_table_association" "public" {
 }
 
 resource "aws_route_table" "private" {
-  count = var.enable_nat_gateway ? (var.single_nat_gateway ? 1 : var.az_count) : 1
+  count = var.single_nat_gateway ? 1 : var.az_count
 
   vpc_id = aws_vpc.this.id
 
-  dynamic "route" {
-    for_each = var.enable_nat_gateway ? [1] : []
-    content {
-      cidr_block     = "0.0.0.0/0"
-      nat_gateway_id = aws_nat_gateway.this[var.single_nat_gateway ? 0 : count.index].id
-    }
+  route {
+    cidr_block     = "0.0.0.0/0"
+    nat_gateway_id = aws_nat_gateway.this[var.single_nat_gateway ? 0 : count.index].id
   }
 
   tags = merge(var.tags, {
@@ -131,12 +139,10 @@ resource "aws_route_table_association" "private" {
   count = var.az_count
 
   subnet_id      = aws_subnet.private[count.index].id
-  route_table_id = aws_route_table.private[var.enable_nat_gateway && !var.single_nat_gateway ? count.index : 0].id
+  route_table_id = aws_route_table.private[var.single_nat_gateway ? 0 : count.index].id
 }
 
 resource "aws_security_group" "vpc_endpoints" {
-  count = var.enable_vpc_endpoints ? 1 : 0
-
   name_prefix = "${local.name_prefix}-vpce-"
   description = "Interface VPC endpoint access from private workloads"
   vpc_id      = aws_vpc.this.id
@@ -163,8 +169,6 @@ resource "aws_security_group" "vpc_endpoints" {
 }
 
 resource "aws_vpc_endpoint" "s3" {
-  count = var.enable_vpc_endpoints ? 1 : 0
-
   vpc_id            = aws_vpc.this.id
   service_name      = "com.amazonaws.${data.aws_region.current.name}.s3"
   vpc_endpoint_type = "Gateway"
@@ -176,13 +180,13 @@ resource "aws_vpc_endpoint" "s3" {
 }
 
 resource "aws_vpc_endpoint" "interface" {
-  for_each = var.enable_vpc_endpoints ? toset(var.interface_endpoint_services) : toset([])
+  for_each = toset(local.interface_endpoint_services)
 
   vpc_id              = aws_vpc.this.id
   service_name        = "com.amazonaws.${data.aws_region.current.name}.${each.key}"
   vpc_endpoint_type   = "Interface"
   subnet_ids          = aws_subnet.private[*].id
-  security_group_ids  = [aws_security_group.vpc_endpoints[0].id]
+  security_group_ids  = [aws_security_group.vpc_endpoints.id]
   private_dns_enabled = true
 
   tags = merge(var.tags, {

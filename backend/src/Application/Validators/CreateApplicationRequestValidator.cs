@@ -13,6 +13,10 @@ public class CreateApplicationRequestValidator : AbstractValidator<CreateApplica
         RuleFor(x => x.ContactEmail)
             .EmailAddress().When(x => !string.IsNullOrEmpty(x.ContactEmail))
             .WithMessage("Invalid email format");
+
+        RuleFor(x => x.Notes).MaximumLength(4000);
+        RuleFor(x => x.ContactName).MaximumLength(200);
+        RuleFor(x => x.ContactPhone).MaximumLength(50);
     }
 }
 
@@ -26,6 +30,29 @@ public class AddApplicationEventRequestValidator : AbstractValidator<AddApplicat
 
         RuleFor(x => x.Description)
             .MaximumLength(2000);
+    }
+}
+
+public class UpdateApplicationStatusRequestValidator : AbstractValidator<UpdateApplicationStatusRequest>
+{
+    public UpdateApplicationStatusRequestValidator()
+    {
+        RuleFor(x => x.Status).IsInEnum();
+        RuleFor(x => x.Note).MaximumLength(2000);
+    }
+}
+
+public class UpdateApplicationRequestValidator : AbstractValidator<UpdateApplicationRequest>
+{
+    public UpdateApplicationRequestValidator()
+    {
+        RuleFor(x => x.Notes).MaximumLength(4000);
+        RuleFor(x => x.ContactName).MaximumLength(200);
+        RuleFor(x => x.ContactPhone).MaximumLength(50);
+        RuleFor(x => x.ContactEmail)
+            .EmailAddress()
+            .When(x => !string.IsNullOrWhiteSpace(x.ContactEmail))
+            .WithMessage("Invalid email format");
     }
 }
 

@@ -33,16 +33,14 @@ variable "domain_name" {
 }
 
 variable "app_subdomain" {
-  description = "Subdomain used by the public Joby application"
+  description = "Subdomain used by the public application"
   type        = string
   default     = "app"
 }
 
-variable "waf_rate_limit" {
-  description = "Maximum requests per five-minute period from a single IP before WAF blocks traffic"
-  type        = number
-  default     = 2000
-}
+# ---------------------------------------------------------------------------
+# Network
+# ---------------------------------------------------------------------------
 
 variable "vpc_cidr" {
   description = "CIDR block for the dedicated VPC"
@@ -73,74 +71,15 @@ variable "private_subnet_cidrs" {
   default     = ["10.20.10.0/24", "10.20.11.0/24", "10.20.12.0/24"]
 }
 
-variable "enable_nat_gateway" {
-  description = "Create NAT gateway egress for private subnets"
-  type        = bool
-  default     = true
-}
-
 variable "single_nat_gateway" {
-  description = "Use one NAT gateway instead of one per Availability Zone"
+  description = "Use one NAT gateway instead of one per Availability Zone (lower cost, single point of failure)"
   type        = bool
   default     = false
 }
 
-variable "enable_vpc_endpoints" {
-  description = "Create VPC endpoints for private AWS API access"
-  type        = bool
-  default     = true
-}
-
-variable "key_pair_name" {
-  description = "Name of an existing EC2 key pair for SSH access"
-  type        = string
-  default     = ""
-
-  validation {
-    condition     = !var.provision_ec2 || length(trimspace(var.key_pair_name)) > 0
-    error_message = "key_pair_name must be set when provision_ec2 is true."
-  }
-}
-
-variable "provision_ec2" {
-  description = "Whether to provision the EC2 host used for Docker Compose deployment"
-  type        = bool
-  default     = false
-}
-
-variable "allowed_ssh_cidrs" {
-  description = "CIDR blocks allowed to SSH into the EC2 instance (e.g. [\"203.0.113.5/32\"])"
-  type        = list(string)
-  default     = []
-
-  validation {
-    condition     = alltrue([for cidr in var.allowed_ssh_cidrs : can(cidrhost(cidr, 0))])
-    error_message = "Every entry must be a valid CIDR block."
-  }
-}
-
-variable "ec2_instance_type" {
-  description = "EC2 instance type (t2.micro and t3.micro are free-tier eligible)"
-  type        = string
-  default     = "t3.micro"
-}
-
-variable "ec2_volume_size" {
-  description = "Root EBS volume size in GB"
-  type        = number
-  default     = 20
-
-  validation {
-    condition     = var.ec2_volume_size >= 8 && var.ec2_volume_size <= 100
-    error_message = "Must be between 8 and 100 GB."
-  }
-}
-
-variable "enable_elastic_ip" {
-  description = "Allocate an Elastic IP for the EC2 instance"
-  type        = bool
-  default     = false
-}
+# ---------------------------------------------------------------------------
+# Database
+# ---------------------------------------------------------------------------
 
 variable "db_name" {
   description = "PostgreSQL database name"
@@ -175,27 +114,14 @@ variable "db_password" {
   }
 }
 
-variable "jwt_secret" {
-  description = "JWT signing secret. Required when manage_application_secret_value is true."
-  type        = string
-  sensitive   = true
-  default     = ""
-}
-
-variable "manage_application_secret_value" {
-  description = "Store application runtime secret values in Secrets Manager through Terraform"
-  type        = bool
-  default     = false
-}
-
 variable "db_instance_class" {
-  description = "RDS instance class (db.t3.micro is free-tier eligible)"
+  description = "RDS instance class"
   type        = string
   default     = "db.t3.medium"
 }
 
 variable "db_allocated_storage" {
-  description = "RDS allocated storage in GB (free tier includes up to 20 GB)"
+  description = "RDS allocated storage in GB"
   type        = number
   default     = 50
 }
@@ -212,14 +138,8 @@ variable "db_multi_az" {
   default     = true
 }
 
-variable "db_performance_insights_enabled" {
-  description = "Enable Performance Insights for RDS query and load troubleshooting"
-  type        = bool
-  default     = true
-}
-
 variable "db_skip_final_snapshot" {
-  description = "Skip final DB snapshot on deletion (true for dev, false for prod)"
+  description = "Skip final DB snapshot on deletion (set true for dev, false for prod)"
   type        = bool
   default     = false
 }
@@ -241,11 +161,26 @@ variable "db_backup_retention_period" {
   }
 }
 
-variable "db_monitoring_interval" {
-  description = "RDS enhanced monitoring interval in seconds"
-  type        = number
-  default     = 60
+# ---------------------------------------------------------------------------
+# Application secrets
+# ---------------------------------------------------------------------------
+
+variable "jwt_secret" {
+  description = "JWT signing secret. Required when manage_application_secret_value is true."
+  type        = string
+  sensitive   = true
+  default     = ""
 }
+
+variable "manage_application_secret_value" {
+  description = "Store application runtime secret values in Secrets Manager through Terraform"
+  type        = bool
+  default     = false
+}
+
+# ---------------------------------------------------------------------------
+# S3
+# ---------------------------------------------------------------------------
 
 variable "s3_bucket_name" {
   description = "S3 bucket name for file uploads. Leave empty to auto-generate a unique name."
@@ -253,41 +188,9 @@ variable "s3_bucket_name" {
   default     = ""
 }
 
-variable "s3_versioning_enabled" {
-  description = "Enable versioning on the S3 bucket"
-  type        = bool
-  default     = true
-}
-
-variable "s3_force_destroy" {
-  description = "Allow Terraform to delete non-empty upload buckets"
-  type        = bool
-  default     = false
-}
-
-variable "k8s_namespace" {
-  description = "Kubernetes namespace used by the application"
-  type        = string
-  default     = "joby"
-}
-
-variable "backend_service_account_name" {
-  description = "Kubernetes service account used by the backend workload"
-  type        = string
-  default     = "joby-backend"
-}
-
-variable "enable_kubernetes_addons" {
-  description = "Install Terraform-managed Helm/Kubernetes add-ons after the EKS cluster is reachable"
-  type        = bool
-  default     = false
-}
-
-variable "app_target_port" {
-  description = "TCP port on the EC2 security group for inbound app traffic (Docker publish port for the frontend, e.g. 8080)."
-  type        = number
-  default     = 8080
-}
+# ---------------------------------------------------------------------------
+# EKS
+# ---------------------------------------------------------------------------
 
 variable "eks_cluster_version" {
   description = "Kubernetes version for the EKS cluster"
@@ -319,16 +222,10 @@ variable "eks_node_max_size" {
   default     = 4
 }
 
-variable "eks_cluster_public_access_cidrs" {
-  description = "CIDR ranges allowed to access the EKS API server"
-  type        = list(string)
-  default     = ["0.0.0.0/0"]
-}
-
 variable "eks_cluster_endpoint_public_access" {
   description = "Expose the EKS API endpoint publicly"
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "eks_cluster_endpoint_private_access" {
@@ -336,6 +233,38 @@ variable "eks_cluster_endpoint_private_access" {
   type        = bool
   default     = true
 }
+
+variable "eks_cluster_public_access_cidrs" {
+  description = "CIDR ranges allowed to access the EKS API server (only applies when public access is enabled)"
+  type        = list(string)
+  default     = []
+}
+
+variable "enable_kubernetes_addons" {
+  description = "Install Terraform-managed Helm/Kubernetes add-ons after the EKS cluster is reachable"
+  type        = bool
+  default     = false
+}
+
+# ---------------------------------------------------------------------------
+# Kubernetes workload identity
+# ---------------------------------------------------------------------------
+
+variable "k8s_namespace" {
+  description = "Kubernetes namespace used by the application"
+  type        = string
+  default     = "joby"
+}
+
+variable "backend_service_account_name" {
+  description = "Kubernetes service account used by the backend workload"
+  type        = string
+  default     = "joby-backend"
+}
+
+# ---------------------------------------------------------------------------
+# Monitoring
+# ---------------------------------------------------------------------------
 
 variable "monitoring_alert_email" {
   description = "Email address for CloudWatch alarm notifications. Leave empty to skip email subscription."
@@ -349,8 +278,24 @@ variable "enable_monitoring_alerting" {
   default     = true
 }
 
-variable "enable_security_baseline" {
-  description = "Enable CloudTrail, GuardDuty, AWS Config, and Security Hub"
-  type        = bool
-  default     = true
+# ---------------------------------------------------------------------------
+# Cost controls
+# ---------------------------------------------------------------------------
+
+variable "billing_alert_email" {
+  description = "Email address for AWS Budgets and Cost Anomaly Detection alerts"
+  type        = string
+  default     = ""
+}
+
+variable "monthly_budget_limit_usd" {
+  description = "Monthly AWS budget limit in USD"
+  type        = number
+  default     = 250
+}
+
+variable "cost_anomaly_threshold_usd" {
+  description = "Minimum anomaly impact in USD before sending alerts"
+  type        = number
+  default     = 25
 }

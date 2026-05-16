@@ -8,7 +8,7 @@ Use `.github/workflows/deploy-aws.yml` to build immutable commit-SHA images, pus
 
 1. Provision infrastructure from `terraform/`.
    - First apply with `enable_kubernetes_addons = false` creates AWS/EKS foundations.
-   - Second apply with `enable_kubernetes_addons = true` installs AWS Load Balancer Controller, External Secrets Operator, ExternalDNS, metrics-server, cluster-autoscaler, and Fluent Bit.
+   - Second apply with `enable_kubernetes_addons = true` installs AWS Load Balancer Controller, External Secrets Operator, ExternalDNS, metrics-server, cluster-autoscaler, Fluent Bit, and ADOT telemetry.
 2. Configure kubeconfig:
    `aws eks update-kubeconfig --region <aws-region> --name <eks-cluster-name>`
 3. Login to ECR:
@@ -22,7 +22,7 @@ Use `.github/workflows/deploy-aws.yml` to build immutable commit-SHA images, pus
    - `serviceaccount.yaml` with `backend_irsa_role_arn`
    - `clustersecretstore.yaml` with the AWS region
    - `externalsecret.yaml` with `application_secret_name`
-   - `ingress.yaml` with `app_hostname`, `acm_certificate_arn`, and `waf_web_acl_arn`
+   - `ingress.yaml` with `origin_hostname`, `acm_certificate_arn`, and `waf_web_acl_arn`
    - `backend.yaml` image tag
    - `frontend.yaml` image tag
 6. Deploy:
@@ -30,4 +30,6 @@ Use `.github/workflows/deploy-aws.yml` to build immutable commit-SHA images, pus
 7. Monitor:
    - Open CloudWatch dashboard from Terraform output `monitoring_dashboard_name`
    - Confirm SNS email subscription if `monitoring_alert_email` is set
+   - Confirm budget and cost anomaly email subscriptions if `billing_alert_email` is set
    - Confirm Route 53 name servers are configured at the domain registrar
+   - Confirm `app_hostname` resolves to CloudFront and `origin_hostname` resolves to the ALB

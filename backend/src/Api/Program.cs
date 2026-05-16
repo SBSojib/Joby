@@ -41,11 +41,13 @@ builder.Services.AddCors(options =>
     options.AddPolicy("AllowFrontend", policy =>
     {
         var origins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
-            ?? new[] { "http://localhost:5173", "http://localhost:3000" };
+            ?? (builder.Environment.IsDevelopment()
+                ? new[] { "http://localhost:5173", "http://localhost:3000" }
+                : Array.Empty<string>());
 
         policy.WithOrigins(origins)
-            .AllowAnyMethod()
-            .AllowAnyHeader()
+            .WithMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
+            .WithHeaders("Authorization", "Content-Type")
             .AllowCredentials();
     });
 });
@@ -112,17 +114,20 @@ app.UseAuthorization();
 app.MapHealthChecks("/health/ready");
 app.MapGet("/health/live", () => Results.Ok(new { status = "healthy" }));
 
-// Metrics endpoint (basic)
-app.MapGet("/metrics", () =>
+if (app.Configuration.GetValue<bool>("Metrics:Enabled"))
 {
-    var metrics = new
+    // Metrics are opt-in so production deployments can expose them only behind trusted networking.
+    app.MapGet("/metrics", () =>
     {
-        timestamp = DateTime.UtcNow,
-        uptime = (DateTime.UtcNow - Process.GetCurrentProcess().StartTime.ToUniversalTime()).TotalSeconds,
-        memoryMB = Process.GetCurrentProcess().WorkingSet64 / 1024 / 1024
-    };
-    return Results.Ok(metrics);
-});
+        var metrics = new
+        {
+            timestamp = DateTime.UtcNow,
+            uptime = (DateTime.UtcNow - Process.GetCurrentProcess().StartTime.ToUniversalTime()).TotalSeconds,
+            memoryMB = Process.GetCurrentProcess().WorkingSet64 / 1024 / 1024
+        };
+        return Results.Ok(metrics);
+    });
+}
 
 app.MapControllers();
 
@@ -135,8 +140,11 @@ if (app.Environment.IsDevelopment())
 // Apply migrations and configure jobs
 using (var scope = app.Services.CreateScope())
 {
-    var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-    db.Database.Migrate();
+    if (app.Configuration.GetValue("Database:ApplyMigrationsOnStartup", app.Environment.IsDevelopment()))
+    {
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        db.Database.Migrate();
+    }
 
     // Configure Hangfire recurring jobs
     app.Services.ConfigureHangfireJobs();
