@@ -7,7 +7,7 @@ on:
     types:
       - completed
     branches:
-      - main
+      - master
   workflow_dispatch:
     inputs:
       environment:
@@ -19,11 +19,6 @@ on:
           - dev
           - staging
           - prod
-      image_tag:
-        description: Deprecated. Deployments always use the commit SHA as the immutable image tag.
-        required: false
-        type: string
-
 permissions:
   contents: read
   id-token: write
@@ -178,8 +173,12 @@ jobs:
             --region "$AWS_REGION" \
             --name "${{ steps.settings.outputs.cluster_name }}"
 
-      - name: Render and apply Kubernetes manifests
+      - name: Prepare Kubernetes manifests
+        id: manifests
         shell: bash
+        env:
+          BACKEND_IMAGE: ${{ steps.settings.outputs.backend_image }}
+          FRONTEND_IMAGE: ${{ steps.settings.outputs.frontend_image }}
         run: |
           set -euo pipefail
 
@@ -192,37 +191,17 @@ jobs:
 
           workdir="$(mktemp -d)"
           cp -R k8s/eks/. "$workdir/"
-          cors_origin="${CORS_ALLOWED_ORIGIN:-https://${APP_HOSTNAME}}"
 
-          python3 - <<'PY' "$workdir" "${{ steps.settings.outputs.backend_image }}" "${{ steps.settings.outputs.frontend_image }}" "$S3_BUCKET_NAME" "$AWS_REGION" "$cors_origin" "$APP_HOSTNAME" "$ORIGIN_HOSTNAME" "$ACM_CERTIFICATE_ARN" "$WAF_WEB_ACL_ARN" "$BACKEND_IRSA_ROLE_ARN" "$APPLICATION_SECRET_NAME"
-          import sys
-          from pathlib import Path
+          export MANIFEST_WORKDIR="$workdir"
+          export MANIFEST_CORS_ORIGIN="${CORS_ALLOWED_ORIGIN:-https://${APP_HOSTNAME}}"
 
-          root = Path(sys.argv[1])
-          replacements = {
-              "REPLACE_WITH_BACKEND_IMAGE": sys.argv[2],
-              "REPLACE_WITH_FRONTEND_IMAGE": sys.argv[3],
-              "REPLACE_WITH_S3_BUCKET_NAME": sys.argv[4],
-              "REPLACE_WITH_AWS_REGION": sys.argv[5],
-              'AWS_REGION: "us-east-1"': f'AWS_REGION: "{sys.argv[5]}"',
-              'Cors__AllowedOrigins__0: "http://localhost"': f'Cors__AllowedOrigins__0: "{sys.argv[6]}"',
-              "REPLACE_WITH_APP_HOSTNAME": sys.argv[7],
-              "REPLACE_WITH_ORIGIN_HOSTNAME": sys.argv[8],
-              "REPLACE_WITH_ACM_CERTIFICATE_ARN": sys.argv[9],
-              "REPLACE_WITH_WAF_WEB_ACL_ARN": sys.argv[10],
-              "REPLACE_WITH_BACKEND_IRSA_ROLE_ARN": sys.argv[11],
-              "REPLACE_WITH_APPLICATION_SECRET_NAME": sys.argv[12],
-              "REPLACE_WITH_ENVIRONMENT": "${{ env.DEPLOY_ENVIRONMENT }}",
-          }
+          python3 .github/scripts/render-k8s-manifests.py
+          echo "dir=$workdir" >> "$GITHUB_OUTPUT"
 
-          for manifest in ("backend.yaml", "frontend.yaml", "configmap.yaml", "ingress.yaml", "serviceaccount.yaml", "clustersecretstore.yaml", "externalsecret.yaml"):
-              path = root / manifest
-              contents = path.read_text(encoding="utf-8")
-              for old, new in replacements.items():
-                  contents = contents.replace(old, new)
-              path.write_text(contents, encoding="utf-8")
-          PY
-
-          kubectl apply -k "$workdir"
+      - name: Deploy to Kubernetes
+        shell: bash
+        run: |
+          set -euo pipefail
+          kubectl apply -k "${{ steps.manifests.outputs.dir }}"
           kubectl rollout status deployment/backend --namespace joby --timeout=5m
           kubectl rollout status deployment/frontend --namespace joby --timeout=5m

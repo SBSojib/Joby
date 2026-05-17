@@ -28,6 +28,7 @@ Use `.github/workflows/deploy-aws.yml` to build immutable commit-SHA images, pus
 6. Deploy:
    - `kubectl apply -k k8s/eks`
 7. Monitor:
+   - Container logs: Terraform Helm **aws-for-fluent-bit** → CloudWatch log group `/aws/eks/<cluster-name>/application` (no separate manifest under `k8s/eks/`)
    - Open CloudWatch dashboard from Terraform output `monitoring_dashboard_name`
    - Confirm SNS email subscription if `monitoring_alert_email` is set
    - Confirm budget and cost anomaly email subscriptions if `billing_alert_email` is set

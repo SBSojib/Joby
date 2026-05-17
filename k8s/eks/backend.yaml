@@ -42,7 +42,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: backend
-          image: 123456789012.dkr.ecr.us-east-1.amazonaws.com/joby-prod-backend:a1b2c3d4e5f6789012345678901234abcd567890
+          image: REPLACE_WITH_BACKEND_IMAGE
           imagePullPolicy: IfNotPresent
           securityContext:
             allowPrivilegeEscalation: false
@@ -70,15 +70,24 @@ spec:
             limits:
               memory: "512Mi"
               cpu: "500m"
+          startupProbe:
+            httpGet:
+              path: /health/live
+              port: 5000
+            failureThreshold: 30
+            periodSeconds: 5
+            timeoutSeconds: 5
           readinessProbe:
             httpGet:
               path: /health/ready
               port: 5000
             initialDelaySeconds: 10
             periodSeconds: 10
+            timeoutSeconds: 5
           livenessProbe:
             httpGet:
               path: /health/live
               port: 5000
             initialDelaySeconds: 30
             periodSeconds: 10
+            timeoutSeconds: 5

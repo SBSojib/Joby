@@ -36,9 +36,7 @@ A full-stack MVP web application for tracking job applications, discovering job 
 - Radix UI components
 
 ### Infrastructure
-- Docker
-- Kubernetes
-- Nginx
+- Docker & Docker Compose (local)
 - GitHub Actions CI/CD
 - AWS EKS, ECR, RDS, S3, and CloudWatch via Terraform
 
@@ -59,7 +57,7 @@ A full-stack MVP web application for tracking job applications, discovering job 
 │       ├── lib/              # API client, utilities
 │       ├── pages/            # Page components
 │       └── types/            # TypeScript types
-├── k8s/                      # Kubernetes manifests
+├── k8s/eks/                  # EKS manifests (Kustomize)
 ├── .github/                  # GitHub Actions workflows and CI/CD docs
 ├── scripts/                  # Dev helper scripts
 └── docker-compose.yml
@@ -170,36 +168,15 @@ chmod +x scripts/build-images.sh
 REGISTRY=your-registry.com ./scripts/build-images.sh v1.0.0
 ```
 
-## Kubernetes Deployment
+## EKS Deployment (production)
 
-### Prerequisites
-- Kubernetes cluster (local: minikube, kind, or Docker Desktop)
-- kubectl configured
-- Ingress controller (nginx)
+Local development uses **Docker Compose** (see Quick Start). Production runs on **AWS EKS** with manifests under `k8s/eks/` and infrastructure in `terraform/`.
 
-### Deploy
+1. Provision AWS with `terraform/` (see `terraform/README.md`).
+2. Configure placeholders in `k8s/eks/` (or use the GitHub deploy workflow).
+3. Deploy: `kubectl apply -k k8s/eks`
 
-```bash
-# Create namespace and apply all manifests
-kubectl apply -f k8s/namespace.yaml
-kubectl apply -f k8s/
-
-# Check deployment status
-kubectl get pods -n joby
-kubectl get services -n joby
-
-# View logs
-kubectl logs -f deployment/backend -n joby
-kubectl logs -f deployment/frontend -n joby
-```
-
-### Configuration
-
-1. Store production secrets in AWS Secrets Manager for EKS deployments
-2. Update `k8s/configmap.yaml` with your domain
-3. Update `k8s/ingress.yaml` with your hostname and TLS settings
-
-For production on EKS, use `terraform/` and `k8s/eks/`. Runtime secrets are synced from AWS Secrets Manager by External Secrets Operator instead of being created manually with `kubectl`.
+Runtime secrets are synced from **AWS Secrets Manager** via External Secrets Operator — see `k8s/eks/README.md` for the full sequence.
 
 ## Development
 
@@ -243,7 +220,7 @@ Edit `backend/src/Infrastructure/Services/ResumeParser.cs` and add skills to the
 
 ## Security Considerations
 
-1. **Secrets Management**: Use Kubernetes secrets or external secrets management (Vault, AWS Secrets Manager)
+1. **Secrets Management**: AWS Secrets Manager + External Secrets on EKS; `.env` for Docker Compose — never commit real secrets
 2. **CORS**: Configure allowed origins for production
 3. **Rate Limiting**: Consider adding rate limiting middleware
 4. **Input Validation**: All inputs validated with FluentValidation

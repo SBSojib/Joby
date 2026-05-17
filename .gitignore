@@ -63,7 +63,7 @@ README.md.local
 terraform/local.Readme.md
 
 # Kubernetes secrets (commit only *.example)
-k8s/secret.yaml
+k8s/eks/secret.yaml
 
 # Secrets (never commit these)
 secrets/

@@ -40,7 +40,7 @@ spec:
       containers:
         - name: frontend
           image: REPLACE_WITH_FRONTEND_IMAGE
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -55,15 +55,24 @@ spec:
             limits:
               memory: "128Mi"
               cpu: "200m"
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 80
+            failureThreshold: 24
+            periodSeconds: 5
+            timeoutSeconds: 3
           readinessProbe:
             httpGet:
               path: /health
               port: 80
             initialDelaySeconds: 5
             periodSeconds: 10
+            timeoutSeconds: 3
           livenessProbe:
             httpGet:
               path: /health
               port: 80
             initialDelaySeconds: 10
             periodSeconds: 10
+            timeoutSeconds: 3
