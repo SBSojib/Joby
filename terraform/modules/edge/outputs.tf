@@ -8,8 +8,13 @@ output "hosted_zone_arn" {
   value       = aws_route53_zone.this.arn
 }
 
+output "hosted_zone_name" {
+  description = "Route 53 hosted zone DNS name"
+  value       = aws_route53_zone.this.name
+}
+
 output "hosted_zone_name_servers" {
-  description = "Name servers for the public hosted zone"
+  description = "Name servers for the Route 53 hosted zone (delegate these in Cloudflare for subdomain mode)"
   value       = aws_route53_zone.this.name_servers
 }
 

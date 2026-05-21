@@ -76,6 +76,16 @@ resource "helm_release" "external_dns" {
   }
 
   set {
+    name  = "domainFilters[0]"
+    value = var.route53_domain_filter
+  }
+
+  set {
+    name  = "zoneIdFilters[0]"
+    value = var.route53_zone_id
+  }
+
+  set {
     name  = "serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn"
     value = aws_iam_role.addon["external_dns"].arn
   }

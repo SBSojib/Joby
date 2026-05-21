@@ -38,6 +38,16 @@ variable "route53_zone_arn" {
   type        = string
 }
 
+variable "route53_zone_id" {
+  description = "Route 53 hosted zone ID scoped for ExternalDNS"
+  type        = string
+}
+
+variable "route53_domain_filter" {
+  description = "DNS domain filter for ExternalDNS (hosted zone name)"
+  type        = string
+}
+
 variable "application_secret_arn" {
   description = "Secrets Manager secret ARN read by External Secrets Operator"
   type        = string

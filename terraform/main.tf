@@ -5,6 +5,10 @@ resource "random_id" "suffix" {
 locals {
   s3_bucket_name = var.s3_bucket_name != "" ? var.s3_bucket_name : "${var.project_name}-${var.environment}-uploads-${random_id.suffix.hex}"
 
+  app_hostname = var.app_subdomain == "" ? trimsuffix(var.domain_name, ".") : "${var.app_subdomain}.${trimsuffix(var.domain_name, ".")}"
+
+  route53_hosted_zone_name = var.dns_delegation_mode == "subdomain" ? local.app_hostname : trimsuffix(var.domain_name, ".")
+
   common_tags = {
     Project     = var.project_name
     Environment = var.environment
@@ -33,11 +37,12 @@ module "network" {
 module "edge" {
   source = "./modules/edge"
 
-  project_name  = var.project_name
-  environment   = var.environment
-  domain_name   = var.domain_name
-  app_subdomain = var.app_subdomain
-  tags          = local.common_tags
+  project_name             = var.project_name
+  environment              = var.environment
+  domain_name              = var.domain_name
+  app_subdomain            = var.app_subdomain
+  route53_hosted_zone_name = local.route53_hosted_zone_name
+  tags                     = local.common_tags
 }
 
 module "eks" {
@@ -139,6 +144,8 @@ module "eks_addons" {
   oidc_provider_arn      = module.eks.oidc_provider_arn
   oidc_provider_url      = module.eks.cluster_oidc_issuer_url
   route53_zone_arn       = module.edge.hosted_zone_arn
+  route53_zone_id        = module.edge.hosted_zone_id
+  route53_domain_filter  = module.edge.hosted_zone_name
   application_secret_arn = module.secrets.application_secret_arn
   tags                   = local.common_tags
 

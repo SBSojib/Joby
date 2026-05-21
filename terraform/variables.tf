@@ -27,15 +27,26 @@ variable "environment" {
 }
 
 variable "domain_name" {
-  description = "Root domain name for the public Route 53 hosted zone"
+  description = "Parent domain (e.g. hasibul.bd). Cloudflare remains authoritative when using subdomain delegation."
   type        = string
-  default     = "example.com"
+  default     = "hasibul.bd"
 }
 
 variable "app_subdomain" {
-  description = "Subdomain used by the public application"
+  description = "Subdomain used by the public application (empty string uses the parent domain apex only)"
   type        = string
-  default     = "app"
+  default     = "joby"
+}
+
+variable "dns_delegation_mode" {
+  description = "apex: Route 53 hosts the full domain (change registrar NS). subdomain: Route 53 hosts only the app FQDN; delegate via NS records in Cloudflare."
+  type        = string
+  default     = "subdomain"
+
+  validation {
+    condition     = contains(["apex", "subdomain"], var.dns_delegation_mode)
+    error_message = "Must be one of: apex, subdomain."
+  }
 }
 
 # ---------------------------------------------------------------------------

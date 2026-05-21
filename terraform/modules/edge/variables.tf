@@ -9,7 +9,7 @@ variable "environment" {
 }
 
 variable "domain_name" {
-  description = "Root domain name for the public Route 53 hosted zone"
+  description = "Parent domain used to build the application hostname (e.g. hasibul.bd)"
   type        = string
 }
 
@@ -17,6 +17,11 @@ variable "app_subdomain" {
   description = "Subdomain used by the public application"
   type        = string
   default     = "app"
+}
+
+variable "route53_hosted_zone_name" {
+  description = "Route 53 hosted zone to create (e.g. joby.hasibul.bd for subdomain delegation from Cloudflare)"
+  type        = string
 }
 
 variable "tags" {

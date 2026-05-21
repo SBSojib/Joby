@@ -73,13 +73,33 @@ output "route53_hosted_zone_id" {
   value       = module.edge.hosted_zone_id
 }
 
+output "route53_hosted_zone_name" {
+  description = "Route 53 hosted zone DNS name (joby.hasibul.bd in subdomain delegation mode)"
+  value       = module.edge.hosted_zone_name
+}
+
 output "route53_name_servers" {
-  description = "Name servers to configure at the domain registrar"
+  description = "Route 53 nameservers for the hosted zone"
   value       = module.edge.hosted_zone_name_servers
+}
+
+output "cloudflare_delegation_record_name" {
+  description = "Cloudflare DNS record name (label only) for NS delegation to Route 53"
+  value       = var.app_subdomain != "" ? var.app_subdomain : "@"
+}
+
+output "dns_delegation_mode" {
+  description = "Configured DNS delegation mode (apex or subdomain)"
+  value       = var.dns_delegation_mode
 }
 
 output "app_hostname" {
   description = "Public application hostname"
+  value       = module.edge.app_hostname
+}
+
+output "origin_hostname" {
+  description = "ALB Ingress hostname (ExternalDNS); same as app_hostname when traffic goes directly to the load balancer"
   value       = module.edge.app_hostname
 }
 
@@ -186,7 +206,37 @@ output "connection_string" {
 
 output "next_steps" {
   description = "What to do after terraform apply"
-  value       = <<-EOT
+  value       = var.dns_delegation_mode == "subdomain" ? <<-EOT
+
+    0. Delegate ${module.edge.app_hostname} to Route 53 (keep ${var.domain_name} on Cloudflare):
+       - In Cloudflare DNS, delete any existing A/CNAME records for "${var.app_subdomain}".
+       - Add four separate NS records:
+         Name: ${var.app_subdomain}
+         Type: NS
+         Content: (each value from terraform output route53_name_servers, DNS only / not proxied)
+       - Wait until: dig NS ${module.edge.app_hostname} +short
+         shows the awsdns nameservers from route53_name_servers.
+
+    1. Configure kubeconfig:
+       aws eks update-kubeconfig --region ${var.aws_region} --name ${module.eks.cluster_name}
+
+    2. Build and push images:
+       IMAGE_TAG=$(git rev-parse HEAD)
+       docker build -t ${module.ecr.backend_repository_url}:$IMAGE_TAG ./backend
+       docker build -t ${module.ecr.frontend_repository_url}:$IMAGE_TAG ./frontend
+       aws ecr get-login-password --region ${var.aws_region} | docker login --username AWS --password-stdin ${module.ecr.backend_repository_url}
+       docker push ${module.ecr.backend_repository_url}:$IMAGE_TAG
+       docker push ${module.ecr.frontend_repository_url}:$IMAGE_TAG
+
+    3. Update k8s manifests:
+       - set backend image to ${module.ecr.backend_repository_url}:$IMAGE_TAG
+       - set frontend image to ${module.ecr.frontend_repository_url}:$IMAGE_TAG
+       - set S3 bucket to ${module.s3.bucket_name}
+       - annotate backend service account with ${module.backend_irsa.role_arn}
+       - set ExternalSecret remote key to ${module.secrets.application_secret_name}
+       - set APP_HOSTNAME / ORIGIN_HOSTNAME to ${module.edge.app_hostname}
+
+  EOT : <<-EOT
 
     1. Configure kubeconfig:
        aws eks update-kubeconfig --region ${var.aws_region} --name ${module.eks.cluster_name}
