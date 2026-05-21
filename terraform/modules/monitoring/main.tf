@@ -1,21 +1,20 @@
 locals {
   name_prefix         = "${var.project_name}-${var.environment}"
-  alarm_actions       = var.enable_alerting ? [aws_sns_topic.alerts[0].arn] : []
-  ok_actions          = var.enable_alerting ? [aws_sns_topic.alerts[0].arn] : []
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  ok_actions          = [aws_sns_topic.alerts.arn]
   custom_namespace    = "${var.project_name}/${var.environment}"
   dashboard_name      = "${local.name_prefix}-operations"
-  create_subscription = var.enable_alerting && length(trimspace(var.alert_email)) > 0
+  create_subscription = length(trimspace(var.alert_email)) > 0
 }
 
 resource "aws_sns_topic" "alerts" {
-  count = var.enable_alerting ? 1 : 0
-  name  = "${local.name_prefix}-alerts"
-  tags  = var.tags
+  name = "${local.name_prefix}-alerts"
+  tags = var.tags
 }
 
 resource "aws_sns_topic_subscription" "email" {
   count     = local.create_subscription ? 1 : 0
-  topic_arn = aws_sns_topic.alerts[0].arn
+  topic_arn = aws_sns_topic.alerts.arn
   protocol  = "email"
   endpoint  = var.alert_email
 }

@@ -4,7 +4,4 @@ db_password                = "CHANGE_ME_use_a_strong_password_here"
 db_instance_class          = "db.t3.medium"
 db_allocated_storage       = 50
 db_max_allocated_storage   = 200
-db_multi_az                = true
-db_skip_final_snapshot     = false
-db_deletion_protection     = true
 db_backup_retention_period = 7

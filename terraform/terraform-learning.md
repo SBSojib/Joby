@@ -2,6 +2,8 @@
 
 Welcome to the Terraform learning guide for the **Joby** application! If you are new to AWS or Terraform, you are in the right place. This document is designed to be an **absolute beginner-friendly** walkthrough of the infrastructure code in this repository. We will use plain English, real-world analogies, and diagrams to explain what everything is, why the Joby app needs it, and how it works under the hood.
 
+> **Note:** Some sections below reference removed toggles (`single_nat_gateway`, `az_count`, `db_multi_az`, `enable_kubernetes_addons`, remote state, etc.). For current behavior, see [`README.md`](README.md).
+
 ### What are we building?
 
 Before we dive into the code, let's understand the **Joby application**. Joby is a job board platform that involves users, profiles, resumes, and job applications. To run this app on the internet securely and reliably, we need several pieces:
@@ -112,7 +114,7 @@ module "network" {
   az_count                = var.az_count
   public_subnet_cidrs     = var.public_subnet_cidrs
   private_subnet_cidrs    = var.private_subnet_cidrs
-  single_nat_gateway      = var.single_nat_gateway
+  # NAT: one gateway per AZ (fixed at 3 AZs; single_nat_gateway removed)
   kubernetes_cluster_name = "${var.project_name}-${var.environment}-eks"
   tags                    = local.common_tags
 }
@@ -1898,7 +1900,7 @@ Helm-installed cluster software plus **IRSA** IAM roles/policies in [terraform/m
 
 ```hcl
 module "eks_addons" {
-  count  = var.enable_kubernetes_addons ? 1 : 0
+  # eks_addons module is always enabled (no count gate)
   source = "./modules/eks_addons"
 
   project_name           = var.project_name

@@ -2,7 +2,7 @@
 
 Terraform module that installs **Helm-managed cluster software** on Amazon EKS and creates **IRSA** IAM roles for workloads that call AWS APIs. Releases include the AWS Load Balancer Controller, External Secrets Operator, ExternalDNS, Metrics Server, Cluster Autoscaler, AWS for Fluent Bit, and the ADOT collector. This is separate from **EKS managed add-ons** (`aws_eks_addon` in [`module.eks`](../eks/main.tf), such as VPC CNI and CoreDNS).
 
-Root wiring lives in [`terraform/main.tf`](../../main.tf) (`module "eks_addons"`, gated by `var.enable_kubernetes_addons`). The Helm provider in [`providers.tf`](../../providers.tf) must reach the cluster API; OIDC trust and scoped IAM policies tie each chart’s service account to AWS.
+Root wiring lives in [`terraform/main.tf`](../../main.tf) (`module "eks_addons"`, always applied with the stack). The Helm provider in [`providers.tf`](../../providers.tf) must reach the cluster API; OIDC trust and scoped IAM policies tie each chart’s service account to AWS.
 
 ## Resources in this module
 
@@ -36,7 +36,6 @@ The module defines **twenty-six Terraform constructs** across [`main.tf`](main.t
 
 **Inputs from other modules and root (`module "eks_addons"` in [`main.tf`](../../main.tf)):**
 
-- `count = var.enable_kubernetes_addons ? 1 : 0` — entire module skipped when false (default in [`variables.tf`](../../variables.tf)); common for a first apply before the API is reachable.
 - `cluster_name`, `oidc_provider_arn`, and `oidc_provider_url` from `module.eks`.
 - `vpc_id` from `module.network.vpc_id` (load balancer controller).
 - `route53_zone_arn` from `module.edge.hosted_zone_arn` (ExternalDNS).
@@ -56,14 +55,13 @@ The module defines **twenty-six Terraform constructs** across [`main.tf`](main.t
 - Root outputs (when add-ons enabled): `external_secrets_role_arn`, `aws_load_balancer_controller_role_arn`, `external_dns_role_arn`, `adot_collector_role_arn`.
 - In-cluster operators and controllers installed by Helm; ExternalSecret resources use output `cluster_secret_store_name` (`aws-secrets-manager`) once `ClusterSecretStore` exists in the cluster.
 
-**Typical apply order:** `module.eks` (and OIDC provider) → `module.secrets` and `module.edge` (for secret ARN and zone ARN) → set `enable_kubernetes_addons = true` and apply this module (IAM roles/policies, then Helm releases). Apply Kubernetes app manifests and confirm SNS or DNS only after controllers are running.
+**Typical apply order:** `module.eks` (and OIDC provider) → `module.secrets` and `module.edge` (for secret ARN and zone ARN) → this module (IAM roles/policies, then Helm releases) in the same `terraform apply` when the EKS API is reachable. Apply Kubernetes app manifests and confirm SNS or DNS only after controllers are running.
 
 ## Notable parameters
 
-### Gating and providers
+### Providers
 
-- **`enable_kubernetes_addons`** (root, default **`false`**) — Skips all resources in this module when false; no partial install from Terraform.
-- **Helm / Kubernetes providers** (root) — Use `aws eks get-token` against `module.eks`; the principal running Terraform needs API access to the cluster endpoint.
+- **Helm / Kubernetes providers** (root) — Use `aws eks get-token` against `module.eks`; the principal running Terraform needs API access to the cluster endpoint during apply.
 
 ### IRSA trust (security)
 

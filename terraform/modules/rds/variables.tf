@@ -52,28 +52,10 @@ variable "max_allocated_storage" {
   default     = 200
 }
 
-variable "multi_az" {
-  description = "Enable synchronous standby in another Availability Zone"
-  type        = bool
-  default     = true
-}
-
 variable "backup_retention_period" {
   description = "Number of days to retain automated backups"
   type        = number
   default     = 7
-}
-
-variable "skip_final_snapshot" {
-  description = "Skip final snapshot on deletion"
-  type        = bool
-  default     = false
-}
-
-variable "deletion_protection" {
-  description = "Enable deletion protection"
-  type        = bool
-  default     = true
 }
 
 variable "tags" {

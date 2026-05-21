@@ -6,18 +6,13 @@ domain_name   = "example.com"
 app_subdomain = "app"
 
 vpc_cidr             = "10.20.0.0/16"
-az_count             = 3
 public_subnet_cidrs  = ["10.20.0.0/24", "10.20.1.0/24", "10.20.2.0/24"]
 private_subnet_cidrs = ["10.20.10.0/24", "10.20.11.0/24", "10.20.12.0/24"]
-single_nat_gateway   = false
 
 k8s_namespace                = "joby"
 backend_service_account_name = "joby-backend"
 
-manage_application_secret_value = false
-jwt_secret                      = ""
-enable_kubernetes_addons        = false
-
+monitoring_alert_email     = ""
 billing_alert_email        = ""
 monthly_budget_limit_usd   = 250
 cost_anomaly_threshold_usd = 25

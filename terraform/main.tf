@@ -24,10 +24,8 @@ module "network" {
   project_name            = var.project_name
   environment             = var.environment
   vpc_cidr                = var.vpc_cidr
-  az_count                = var.az_count
   public_subnet_cidrs     = var.public_subnet_cidrs
   private_subnet_cidrs    = var.private_subnet_cidrs
-  single_nat_gateway      = var.single_nat_gateway
   kubernetes_cluster_name = "${var.project_name}-${var.environment}-eks"
   tags                    = local.common_tags
 }
@@ -45,19 +43,18 @@ module "edge" {
 module "eks" {
   source = "./modules/eks"
 
-  project_name                    = var.project_name
-  environment                     = var.environment
-  cluster_version                 = var.eks_cluster_version
-  subnet_ids                      = module.network.private_subnet_ids
-  vpc_id                          = module.network.vpc_id
-  node_instance_types             = var.eks_node_instance_types
-  node_desired_size               = var.eks_node_desired_size
-  node_min_size                   = var.eks_node_min_size
-  node_max_size                   = var.eks_node_max_size
-  cluster_endpoint_public_access  = var.eks_cluster_endpoint_public_access
-  cluster_endpoint_private_access = var.eks_cluster_endpoint_private_access
-  cluster_public_access_cidrs     = var.eks_cluster_public_access_cidrs
-  tags                            = local.common_tags
+  project_name                   = var.project_name
+  environment                    = var.environment
+  cluster_version                = var.eks_cluster_version
+  subnet_ids                     = module.network.private_subnet_ids
+  vpc_id                         = module.network.vpc_id
+  node_instance_types            = var.eks_node_instance_types
+  node_desired_size              = var.eks_node_desired_size
+  node_min_size                  = var.eks_node_min_size
+  node_max_size                  = var.eks_node_max_size
+  cluster_endpoint_public_access = var.eks_cluster_endpoint_public_access
+  cluster_public_access_cidrs    = var.eks_cluster_public_access_cidrs
+  tags                           = local.common_tags
 }
 
 module "security" {
@@ -119,9 +116,6 @@ module "rds" {
   instance_class          = var.db_instance_class
   allocated_storage       = var.db_allocated_storage
   max_allocated_storage   = var.db_max_allocated_storage
-  multi_az                = var.db_multi_az
-  skip_final_snapshot     = var.db_skip_final_snapshot
-  deletion_protection     = var.db_deletion_protection
   backup_retention_period = var.db_backup_retention_period
   tags                    = local.common_tags
 }
@@ -129,20 +123,12 @@ module "rds" {
 module "secrets" {
   source = "./modules/secrets"
 
-  project_name        = var.project_name
-  environment         = var.environment
-  db_host             = module.rds.address
-  db_port             = module.rds.port
-  db_name             = var.db_name
-  db_username         = var.db_username
-  db_password         = var.db_password
-  jwt_secret          = var.jwt_secret
-  manage_secret_value = var.manage_application_secret_value
-  tags                = local.common_tags
+  project_name = var.project_name
+  environment  = var.environment
+  tags         = local.common_tags
 }
 
 module "eks_addons" {
-  count  = var.enable_kubernetes_addons ? 1 : 0
   source = "./modules/eks_addons"
 
   project_name           = var.project_name
@@ -172,7 +158,6 @@ module "monitoring" {
   application_log_group_name = aws_cloudwatch_log_group.app.name
   waf_web_acl_name           = module.edge.waf_web_acl_name
   alert_email                = var.monitoring_alert_email
-  enable_alerting            = var.enable_monitoring_alerting
   tags                       = local.common_tags
 }
 

@@ -6,13 +6,13 @@ Root wiring lives in [`terraform/main.tf`](../../main.tf) (`module "monitoring"`
 
 ## Resources in this module
 
-The module defines **thirteen Terraform constructs** (eleven AWS resources, one locals block, no data sources). SNS resources are created only when alerting is enabled; the WAF alarm is created only when a Web ACL name is non-empty.
+The module defines **thirteen Terraform constructs** (eleven AWS resources, one locals block, no data sources). SNS topic and alarms are always created; email subscription is optional when `alert_email` is set. The WAF alarm is created only when a Web ACL name is non-empty.
 
 | Resource / data source | What it is | Purpose | How it connects |
 | --- | --- | --- | --- |
-| `locals` (`name_prefix`, `alarm_actions`, `ok_actions`, `custom_namespace`, `dashboard_name`, `create_subscription`) | Terraform locals | Naming prefix, **SNS ARNs** for alarm actions (or empty when alerting is off), custom metric namespace, dashboard name, and whether to create an email subscription | `alarm_actions` / `ok_actions` feed all `aws_cloudwatch_metric_alarm` resources; `custom_namespace` is used by log metric filters and related alarms; `dashboard_name` is used by `aws_cloudwatch_dashboard.operations` |
-| `aws_sns_topic.alerts` | SNS topic | **Notification bus** for alarm state changes | Created when `enable_alerting` is true; ARN referenced by `local.alarm_actions` and `aws_sns_topic_subscription.email` |
-| `aws_sns_topic_subscription.email` | SNS email subscription | Delivers alarm notifications to **`alert_email`** | Created when alerting is on and `alert_email` is non-empty after trim; subscribes to `aws_sns_topic.alerts[0]` |
+| `locals` (`name_prefix`, `alarm_actions`, `ok_actions`, `custom_namespace`, `dashboard_name`, `create_subscription`) | Terraform locals | Naming prefix, **SNS ARNs** for alarm actions, custom metric namespace, dashboard name, and whether to create an email subscription | `alarm_actions` / `ok_actions` feed all `aws_cloudwatch_metric_alarm` resources; `custom_namespace` is used by log metric filters and related alarms; `dashboard_name` is used by `aws_cloudwatch_dashboard.operations` |
+| `aws_sns_topic.alerts` | SNS topic | **Notification bus** for alarm state changes | ARN referenced by `local.alarm_actions` and `aws_sns_topic_subscription.email` |
+| `aws_sns_topic_subscription.email` | SNS email subscription | Delivers alarm notifications to **`alert_email`** | Created when `alert_email` is non-empty after trim; subscribes to `aws_sns_topic.alerts` |
 | `aws_cloudwatch_log_metric_filter.app_errors` | CloudWatch Logs metric filter | Increments **`AppErrorCount`** when log events match pattern `ERROR` | Reads `var.application_log_group_name` (root `aws_cloudwatch_log_group.app.name`); metric namespace `local.custom_namespace` |
 | `aws_cloudwatch_log_metric_filter.app_warnings` | CloudWatch Logs metric filter | Increments **`AppWarningCount`** when log events match pattern `WARN` | Same log group input as `app_errors`; feeds `aws_cloudwatch_metric_alarm.app_warnings_high` |
 | `aws_cloudwatch_metric_alarm.rds_cpu_high` | CloudWatch alarm | Fires when **RDS CPU** average exceeds **80%** over two 5-minute periods | Dimension `DBInstanceIdentifier` = `var.rds_instance_identifier` (`module.rds.identifier`); namespace `AWS/RDS` |
@@ -32,7 +32,7 @@ The module defines **thirteen Terraform constructs** (eleven AWS resources, one 
 - `eks_cluster_name` from `module.eks.cluster_name` (EKS control plane metrics).
 - `application_log_group_name` from root [`aws_cloudwatch_log_group.app`](../../main.tf) (`/${project_name}/${environment}`, 7-day retention at root).
 - `waf_web_acl_name` from `module.edge.waf_web_acl_name` (regional WAF Web ACL **name** for `AWS/WAFV2` alarm dimensions).
-- `alert_email` and `enable_alerting` from root `monitoring_alert_email` and `enable_monitoring_alerting`.
+- `alert_email` from root `monitoring_alert_email`.
 - `project_name`, `environment`, `aws_region`, and `tags` from root variables and `local.common_tags`.
 
 **Not defined inside this module:**
@@ -49,15 +49,14 @@ The module defines **thirteen Terraform constructs** (eleven AWS resources, one 
 - Root outputs `monitoring_dashboard_name` and `monitoring_alerts_topic_arn` for operators and runbooks.
 - No other Terraform modules depend on this module’s outputs in the current root stack.
 
-**Typical apply order:** RDS and EKS (and edge WAF when used) → root app log group → `module.monitoring` (filters, alarms, dashboard, optional SNS). Confirm SNS email subscriptions in the inbox when email alerting is enabled. Alarms evaluate published metrics even when `enable_alerting` is false; only SNS actions are omitted.
+**Typical apply order:** RDS and EKS (and edge WAF when used) → root app log group → `module.monitoring` (filters, alarms, dashboard, SNS topic). Confirm SNS email subscriptions in the inbox when `monitoring_alert_email` is set.
 
 ## Notable parameters
 
 ### Alerting and notifications
 
-- **`enable_alerting`** (variable, default **`true`**) — When false, **no SNS topic** is created and alarms have empty `alarm_actions` / `ok_actions` (CloudWatch still shows alarm state in the console).
-- **`alert_email`** (variable, default **`""`**) — Email subscription is created only when alerting is on and the address is non-empty; recipients must **confirm** the SNS subscription before mail is delivered.
-- **Root `enable_monitoring_alerting` / `monitoring_alert_email`** — Same behavior at apply time; see [`monitoring.auto.tfvars.example`](../../monitoring.auto.tfvars.example).
+- **`alert_email`** (variable, default **`""`**) — Email subscription is created only when the address is non-empty; recipients must **confirm** the SNS subscription before mail is delivered.
+- **Root `monitoring_alert_email`** — Passed as `alert_email` at apply time; see [`general.auto.tfvars.example`](../../general.auto.tfvars.example).
 
 ### Log-based application metrics
 

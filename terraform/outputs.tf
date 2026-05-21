@@ -45,22 +45,22 @@ output "application_secret_arn" {
 
 output "external_secrets_role_arn" {
   description = "IRSA role ARN for External Secrets Operator"
-  value       = var.enable_kubernetes_addons ? module.eks_addons[0].external_secrets_role_arn : null
+  value       = module.eks_addons.external_secrets_role_arn
 }
 
 output "aws_load_balancer_controller_role_arn" {
   description = "IRSA role ARN for AWS Load Balancer Controller"
-  value       = var.enable_kubernetes_addons ? module.eks_addons[0].aws_load_balancer_controller_role_arn : null
+  value       = module.eks_addons.aws_load_balancer_controller_role_arn
 }
 
 output "external_dns_role_arn" {
   description = "IRSA role ARN for ExternalDNS"
-  value       = var.enable_kubernetes_addons ? module.eks_addons[0].external_dns_role_arn : null
+  value       = module.eks_addons.external_dns_role_arn
 }
 
 output "adot_collector_role_arn" {
   description = "IRSA role ARN for ADOT Collector"
-  value       = var.enable_kubernetes_addons ? module.eks_addons[0].adot_collector_role_arn : null
+  value       = module.eks_addons.adot_collector_role_arn
 }
 
 output "cloudwatch_log_group" {

@@ -48,33 +48,26 @@ variable "vpc_cidr" {
   default     = "10.20.0.0/16"
 }
 
-variable "az_count" {
-  description = "Number of Availability Zones to use for public and private subnets"
-  type        = number
-  default     = 3
+variable "public_subnet_cidrs" {
+  description = "CIDR blocks for three public subnets (one per AZ)"
+  type        = list(string)
+  default     = ["10.20.0.0/24", "10.20.1.0/24", "10.20.2.0/24"]
 
   validation {
-    condition     = var.az_count >= 2 && var.az_count <= 3
-    error_message = "Use two or three Availability Zones."
+    condition     = length(var.public_subnet_cidrs) == 3
+    error_message = "Exactly three public subnet CIDR blocks are required."
   }
 }
 
-variable "public_subnet_cidrs" {
-  description = "CIDR blocks for public subnets"
-  type        = list(string)
-  default     = ["10.20.0.0/24", "10.20.1.0/24", "10.20.2.0/24"]
-}
-
 variable "private_subnet_cidrs" {
-  description = "CIDR blocks for private application and database subnets"
+  description = "CIDR blocks for three private subnets (one per AZ)"
   type        = list(string)
   default     = ["10.20.10.0/24", "10.20.11.0/24", "10.20.12.0/24"]
-}
 
-variable "single_nat_gateway" {
-  description = "Use one NAT gateway instead of one per Availability Zone (lower cost, single point of failure)"
-  type        = bool
-  default     = false
+  validation {
+    condition     = length(var.private_subnet_cidrs) == 3
+    error_message = "Exactly three private subnet CIDR blocks are required."
+  }
 }
 
 # ---------------------------------------------------------------------------
@@ -132,24 +125,6 @@ variable "db_max_allocated_storage" {
   default     = 200
 }
 
-variable "db_multi_az" {
-  description = "Enable synchronous standby in another Availability Zone for RDS"
-  type        = bool
-  default     = true
-}
-
-variable "db_skip_final_snapshot" {
-  description = "Skip final DB snapshot on deletion (set true for dev, false for prod)"
-  type        = bool
-  default     = false
-}
-
-variable "db_deletion_protection" {
-  description = "Enable deletion protection on the RDS instance"
-  type        = bool
-  default     = true
-}
-
 variable "db_backup_retention_period" {
   description = "Number of days to retain automated backups (0 disables)"
   type        = number
@@ -159,23 +134,6 @@ variable "db_backup_retention_period" {
     condition     = var.db_backup_retention_period >= 0 && var.db_backup_retention_period <= 35
     error_message = "Must be between 0 and 35."
   }
-}
-
-# ---------------------------------------------------------------------------
-# Application secrets
-# ---------------------------------------------------------------------------
-
-variable "jwt_secret" {
-  description = "JWT signing secret. Required when manage_application_secret_value is true."
-  type        = string
-  sensitive   = true
-  default     = ""
-}
-
-variable "manage_application_secret_value" {
-  description = "Store application runtime secret values in Secrets Manager through Terraform"
-  type        = bool
-  default     = false
 }
 
 # ---------------------------------------------------------------------------
@@ -228,22 +186,10 @@ variable "eks_cluster_endpoint_public_access" {
   default     = false
 }
 
-variable "eks_cluster_endpoint_private_access" {
-  description = "Expose the EKS API endpoint inside the VPC"
-  type        = bool
-  default     = true
-}
-
 variable "eks_cluster_public_access_cidrs" {
   description = "CIDR ranges allowed to access the EKS API server (only applies when public access is enabled)"
   type        = list(string)
   default     = []
-}
-
-variable "enable_kubernetes_addons" {
-  description = "Install Terraform-managed Helm/Kubernetes add-ons after the EKS cluster is reachable"
-  type        = bool
-  default     = false
 }
 
 # ---------------------------------------------------------------------------
@@ -270,12 +216,6 @@ variable "monitoring_alert_email" {
   description = "Email address for CloudWatch alarm notifications. Leave empty to skip email subscription."
   type        = string
   default     = ""
-}
-
-variable "enable_monitoring_alerting" {
-  description = "Enable CloudWatch alarms and SNS alerting resources."
-  type        = bool
-  default     = true
 }
 
 # ---------------------------------------------------------------------------

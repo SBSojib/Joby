@@ -59,7 +59,6 @@ A full-stack MVP web application for tracking job applications, discovering job 
 │       └── types/            # TypeScript types
 ├── k8s/eks/                  # EKS manifests (Kustomize)
 ├── .github/                  # GitHub Actions workflows and CI/CD docs
-├── scripts/                  # Dev helper scripts
 └── docker-compose.yml
 ```
 
@@ -90,23 +89,17 @@ docker compose --profile local up --build -d
 ### Option 2: Local Development
 
 ```bash
-# Run the setup script
-# Windows PowerShell:
-.\scripts\dev-setup.ps1
-
-# Linux/Mac:
-chmod +x scripts/dev-setup.sh
-./scripts/dev-setup.sh
-
 # Start PostgreSQL (Compose profile `local`; published on host port 5300)
 docker compose --profile local up -d postgres
 
-# Start backend (terminal 1)
+# Backend (terminal 1)
 cd backend
+dotnet restore
 dotnet run --project src/Api
 
-# Start frontend (terminal 2)
+# Frontend (terminal 2)
 cd frontend
+npm install
 npm run dev
 
 # Access the app
@@ -160,12 +153,14 @@ Once the backend is running, visit:
 ## Building Docker Images
 
 ```bash
-# Build images
-chmod +x scripts/build-images.sh
-./scripts/build-images.sh v1.0.0
+docker build -t joby-backend:v1.0.0 ./backend
+docker build -t joby-frontend:v1.0.0 ./frontend
 
-# Or with a registry
-REGISTRY=your-registry.com ./scripts/build-images.sh v1.0.0
+# Optional: tag and push to a registry
+docker tag joby-backend:v1.0.0 your-registry.com/joby-backend:v1.0.0
+docker tag joby-frontend:v1.0.0 your-registry.com/joby-frontend:v1.0.0
+docker push your-registry.com/joby-backend:v1.0.0
+docker push your-registry.com/joby-frontend:v1.0.0
 ```
 
 ## EKS Deployment (production)

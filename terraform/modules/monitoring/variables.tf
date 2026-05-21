@@ -33,11 +33,6 @@ variable "alert_email" {
   default = ""
 }
 
-variable "enable_alerting" {
-  type    = bool
-  default = true
-}
-
 variable "tags" {
   type    = map(string)
   default = {}

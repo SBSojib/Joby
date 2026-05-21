@@ -2,7 +2,6 @@
 *.tfstate
 *.tfstate.*
 .terraform/
-backend.generated.tf
 
 # User-specific variables (may contain passwords)
 terraform.tfvars

@@ -49,11 +49,6 @@ variable "cluster_endpoint_public_access" {
   default = false
 }
 
-variable "cluster_endpoint_private_access" {
-  type    = bool
-  default = true
-}
-
 variable "enabled_cluster_log_types" {
   type    = list(string)
   default = ["api", "audit", "authenticator", "controllerManager", "scheduler"]

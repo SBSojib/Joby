@@ -6,18 +6,17 @@ Use `.github/workflows/deploy-aws.yml` to build immutable commit-SHA images, pus
 
 ## Manual deployment
 
-1. Provision infrastructure from `terraform/`.
-   - First apply with `enable_kubernetes_addons = false` creates AWS/EKS foundations.
-   - Second apply with `enable_kubernetes_addons = true` installs AWS Load Balancer Controller, External Secrets Operator, ExternalDNS, metrics-server, cluster-autoscaler, Fluent Bit, and ADOT telemetry.
-2. Configure kubeconfig:
+1. Provision infrastructure from `terraform/` (`terraform apply` installs EKS, Helm add-ons, and supporting AWS resources in one run). Terraform must be able to reach the EKS API during apply; enable `eks_cluster_endpoint_public_access` temporarily or run apply from a networked environment if the API is private-only.
+2. Populate the Secrets Manager secret shell (Terraform output `application_secret_name`) with runtime values before deploying the app.
+3. Configure kubeconfig:
    `aws eks update-kubeconfig --region <aws-region> --name <eks-cluster-name>`
-3. Login to ECR:
+4. Login to ECR:
    `aws ecr get-login-password --region <aws-region> | docker login --username AWS --password-stdin <aws-account-id>.dkr.ecr.<aws-region>.amazonaws.com`
-4. Build and push images with an immutable tag:
+5. Build and push images with an immutable tag:
    - `IMAGE_TAG=$(git rev-parse HEAD)`
    - backend: `docker build -t <backend-ecr-url>:$IMAGE_TAG ./backend && docker push <backend-ecr-url>:$IMAGE_TAG`
    - frontend: `docker build -t <frontend-ecr-url>:$IMAGE_TAG ./frontend && docker push <frontend-ecr-url>:$IMAGE_TAG`
-5. Update:
+6. Update:
    - `configmap.yaml` with `S3_BUCKET_NAME`, `AWS_REGION`, `Cors__AllowedOrigins__0`
    - `serviceaccount.yaml` with `backend_irsa_role_arn`
    - `clustersecretstore.yaml` with the AWS region
@@ -25,9 +24,9 @@ Use `.github/workflows/deploy-aws.yml` to build immutable commit-SHA images, pus
    - `ingress.yaml` with `origin_hostname`, `acm_certificate_arn`, and `waf_web_acl_arn`
    - `backend.yaml` image tag
    - `frontend.yaml` image tag
-6. Deploy:
+7. Deploy:
    - `kubectl apply -k k8s/eks`
-7. Monitor:
+8. Monitor:
    - Container logs: Terraform Helm **aws-for-fluent-bit** → CloudWatch log group `/aws/eks/<cluster-name>/application` (no separate manifest under `k8s/eks/`)
    - Open CloudWatch dashboard from Terraform output `monitoring_dashboard_name`
    - Confirm SNS email subscription if `monitoring_alert_email` is set

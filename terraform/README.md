@@ -14,7 +14,6 @@ This stack provisions the AWS foundation for running Joby on EKS with managed AW
 - AWS Budgets and Cost Anomaly Detection for billing guardrails
 - CloudTrail, GuardDuty, AWS Config, and Security Hub baseline
 - Least-privilege IAM role for the backend Kubernetes service account to access the uploads bucket
-- Optional EC2 host for legacy Docker Compose deployments (`provision_ec2 = true`)
 
 ## Architecture
 
@@ -32,7 +31,7 @@ The Terraform modules are intentionally small and service-oriented:
 - `s3`: owns the uploads bucket, public access block, encryption, ownership controls, TLS-only access policy, versioning, and lifecycle cleanup.
 - `ecr`: owns container repositories, scan-on-push, encryption, and cleanup of untagged images.
 - `irsa`: owns the IAM role trusted by the backend Kubernetes service account.
-- `secrets`: owns the Secrets Manager application secret metadata and optional managed secret value.
+- `secrets`: owns the Secrets Manager application secret shell (values managed outside Terraform).
 - `security_baseline`: owns CloudTrail, GuardDuty, AWS Config, Security Hub, and the audit log bucket.
 - `security`: owns application and database security groups.
 - `cost_controls`: owns AWS Budgets and Cost Anomaly Detection.
@@ -46,11 +45,11 @@ The stack creates a dedicated VPC instead of using the AWS default VPC. Real pro
 
 ### Public And Private Subnets
 
-Public subnets are reserved for internet-facing infrastructure such as load balancers, NAT gateways, and the optional EC2 legacy host. EKS nodes and RDS run in private subnets. This is the common AWS pattern for customer-facing applications because only the edge layer needs public routing; application compute and databases should not have direct public IP exposure.
+Public subnets are reserved for internet-facing infrastructure such as load balancers and NAT gateways. EKS nodes and RDS run in private subnets across three Availability Zones. This is the common AWS pattern for customer-facing applications because only the edge layer needs public routing; application compute and databases should not have direct public IP exposure.
 
 ### NAT Gateway Egress
 
-Private subnets use NAT gateway egress by default. This lets EKS nodes pull container images, download OS packages, and call external APIs without being directly reachable from the internet. Production defaults use one NAT gateway per Availability Zone for fault isolation.
+Private subnets use NAT gateway egress with one NAT gateway per Availability Zone (three AZs). This lets EKS nodes pull container images, download OS packages, and call external APIs without being directly reachable from the internet.
 
 ### VPC Endpoints
 
@@ -66,7 +65,7 @@ The cluster uses EKS managed node groups instead of self-managed nodes. Managed 
 
 ### EKS API Endpoint Access
 
-The EKS API endpoint supports both public and private access by default. Private access allows in-VPC operations, while public access keeps first deployments practical from a developer workstation or CI runner. In production, restrict `eks_cluster_public_access_cidrs` to trusted office/VPN/CI CIDRs instead of leaving `0.0.0.0/0`.
+The EKS API endpoint always has private access enabled. Public access is optional via `eks_cluster_endpoint_public_access`; when enabled, restrict `eks_cluster_public_access_cidrs` to trusted office/VPN/CI CIDRs. Terraform-managed Helm add-ons require API reachability during `terraform apply`.
 
 ### EKS Managed Add-ons And OIDC
 
@@ -78,11 +77,11 @@ The backend gets a dedicated IAM role that trusts only one Kubernetes service ac
 
 ### Secrets Manager And External Secrets
 
-Runtime secrets are stored in AWS Secrets Manager and synced into Kubernetes by External Secrets Operator. This avoids committing secret YAML or writing secrets from CI. Terraform can optionally manage the initial secret value with `manage_application_secret_value`, but for mature production environments you can leave values managed by a controlled secret-rotation process.
+Runtime secrets are stored in AWS Secrets Manager and synced into Kubernetes by External Secrets Operator. Terraform creates the secret shell only; populate secret values in the AWS console, CLI, or your secret-management process before deploying the application.
 
 ### Private RDS PostgreSQL
 
-RDS is private, encrypted, tagged, and reachable only from approved application security groups. Backups, final snapshot behavior, deletion protection, Multi-AZ, and Performance Insights are variables because dev and production have different cost and recovery needs. For production, use Multi-AZ, deletion protection, nonzero backup retention, and final snapshots.
+RDS is private, encrypted, Multi-AZ, deletion-protected, and reachable only from approved application security groups. Final snapshots are always taken on destroy. Backup retention is configurable via `db_backup_retention_period`.
 
 ### S3 Upload Bucket Hardening
 
@@ -106,65 +105,22 @@ AWS Budgets alerts on forecasted and actual monthly spend, while Cost Anomaly De
 
 ### CloudWatch Monitoring
 
-The stack creates a CloudWatch dashboard and alarms for RDS health, EKS API failures, CloudFront 4xx/5xx errors, WAF blocks, and application warning/error logs. This gives a small team immediate operational visibility without introducing another monitoring platform. SNS email alerts are optional because email subscriptions require recipient confirmation.
-
-### Optional EC2 Legacy Mode
-
-`provision_ec2` remains available for a legacy Docker Compose deployment path. It is isolated from the main EKS path and placed in a public subnet only when enabled. New deployments should prefer EKS; the EC2 path is useful for migration, demos, or simple break-glass testing.
+The stack creates a CloudWatch dashboard and alarms for RDS health, EKS API failures, WAF blocks, and application warning/error logs. SNS email subscriptions are optional when `monitoring_alert_email` is set (recipients must confirm the subscription).
 
 ## Prerequisites
 
 - Terraform >= 1.5
 - AWS CLI configured with access to the target account
 - Docker for building and pushing images
-- Optional S3 bucket for Terraform remote state
-- Optional DynamoDB table for Terraform remote state locking
 
 ## Terraform State
 
-Terraform backend configuration is intentionally opt-in. Backend selection happens during `terraform init`, before Terraform variables are loaded, so it cannot be controlled with a normal `*.tfvars` setting.
-
-### Local State
-
-Local state is the default. Use it for local experiments, learning, and short-lived dev environments where you do not need team state sharing:
+This stack uses **local state** only (`terraform.tfstate` in the `terraform/` directory). Do not commit state files; they may contain sensitive values.
 
 ```bash
 cd terraform
 terraform init
 ```
-
-Or run the helper:
-
-```bash
-bash ./init-local.sh
-```
-
-This path does not require an S3 backend bucket and will not prompt for one.
-
-### Remote S3 State
-
-Use remote S3 state for shared environments such as staging and production. Remote state gives the team a single source of truth and supports state locking when a DynamoDB lock table is provided.
-
-The remote backend does not create the S3 bucket or DynamoDB table. Create those bootstrap resources once outside this stack, then initialize with:
-
-```bash
-cd terraform
-bash ./init-remote-s3.sh \
-  -b <tf-state-bucket> \
-  -r <aws-region> \
-  -k joby/dev/terraform.tfstate
-```
-
-Add `-d <tf-lock-table>` if you use a DynamoDB lock table.
-
-PowerShell helpers are also available:
-
-```powershell
-.\init-local.ps1
-.\init-remote-s3.ps1 -Bucket <tf-state-bucket> -Region <aws-region> -Key joby/dev/terraform.tfstate
-```
-
-The remote helper creates `backend.generated.tf` from `backend.generated.tf.example`. That generated file is ignored by Git so local and remote workflows do not fight each other.
 
 Keep `.terraform.lock.hcl` committed so provider versions are reproducible in CI and on developer machines.
 
@@ -172,26 +128,18 @@ Keep `.terraform.lock.hcl` committed so provider versions are reproducible in CI
 
 Use split variable files in `terraform/`:
 
-- `general.auto.tfvars`: region, environment, VPC, subnet, and Kubernetes namespace settings
-- `eks.auto.tfvars`: cluster version, node group size, and API endpoint access
-- `rds.auto.tfvars`: PostgreSQL sizing, backups, deletion protection, and HA controls
-- `s3.auto.tfvars`: uploads bucket name, versioning, and destroy behavior
-- `ec2.auto.tfvars`: optional legacy EC2 mode
-- `monitoring.auto.tfvars`: alerting toggle and email subscription
+- `general.auto.tfvars`: region, environment, VPC, subnet, Kubernetes namespace, and alert emails
+- `eks.auto.tfvars`: cluster version, node group size, and optional public API access
+- `rds.auto.tfvars`: PostgreSQL sizing and backup retention
+- `s3.auto.tfvars`: uploads bucket name
 
 Templates are included as `*.auto.tfvars.example`.
 
 ## Environment Guidance
 
-The defaults now favor production: three Availability Zones, one NAT gateway per AZ, VPC endpoints, Multi-AZ RDS, deletion protection, final snapshots, seven-day backup retention, immutable image tags, and account security services enabled.
+Fixed infrastructure choices: three Availability Zones, one NAT gateway per AZ, Multi-AZ RDS with deletion protection and final snapshots, private EKS API access, always-on Helm add-ons and CloudWatch alarms.
 
-For temporary development environments, reduce cost explicitly in your var files:
-
-- Set `az_count = 2` and `single_nat_gateway = true`.
-- Set `db_multi_az = false`, `db_deletion_protection = false`, `db_skip_final_snapshot = true`, and lower RDS sizing.
-- Set `enable_security_baseline = false` only for disposable sandboxes.
-- Leave `enable_kubernetes_addons = false` until the EKS cluster has been created once.
-- Set `monthly_budget_limit_usd` to match the target environment and provide `billing_alert_email` for cost alerts.
+To reduce cost in non-production environments, lower RDS/EKS sizing and set `monthly_budget_limit_usd` with `billing_alert_email` or `monitoring_alert_email` for cost alerts.
 
 ## Provision
 
@@ -204,14 +152,9 @@ terraform plan
 terraform apply
 ```
 
-For Terraform-managed Helm/Kubernetes add-ons, use a two-step bootstrap:
+Ensure Terraform can reach the EKS API during apply (for example, set `eks_cluster_endpoint_public_access = true` with restricted CIDRs for bootstrap from a laptop, or run apply from CI inside the network).
 
-```bash
-terraform apply -var="enable_kubernetes_addons=false"
-terraform apply -var="enable_kubernetes_addons=true"
-```
-
-The first apply creates the EKS API endpoint. The second apply lets the Helm provider connect to the cluster and install controllers/operators.
+After apply, populate the Secrets Manager secret named in output `application_secret_name` before deploying workloads.
 
 ## Key Outputs
 
